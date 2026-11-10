@@ -151,6 +151,12 @@ class MyConfigViewModel @Inject constructor(
             // multi-line pastes: try to parse every line as config links
             trimmed.lines().any { l -> listOf("vless://", "vmess://", "trojan://", "ss://").any { l.trim().startsWith(it) } } ->
                 importFromLink(trimmed.lines().joinToString("\n"))
+            // a pasted Xray JSON config (full export from v2rayNG/v2Box or a
+            // single outbound) — the parser understands whole-text JSON, so
+            // just hand it over; works even when the JSON is surrounded by
+            // other text as long as it contains an outbounds array
+            trimmed.startsWith("{") && trimmed.contains("\"outbounds\"") ->
+                importFromLink(trimmed)
             else -> viewModelScope.launch { _events.emit(Event.NothingValid) }
         }
     }

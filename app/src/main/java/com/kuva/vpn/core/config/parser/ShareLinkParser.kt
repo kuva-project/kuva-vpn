@@ -249,9 +249,16 @@ class ShareLinkParser @Inject constructor() {
                 val ob = outbounds.getJSONObject(i)
                 val proto = ob.optString("protocol")
                 if (proto in setOf("vless", "vmess", "trojan", "shadowsocks", "socks", "http")) {
+                    // exporters put the remark in different spots: outbound
+                    // "remark"/"name" (v2rayN/Hiddify), else root "remark"
+                    val display = ob.optString("remark")
+                        .ifEmpty { ob.optString("name") }
+                        .ifEmpty { j.optString("remarks") }   // v2rayNG full export
+                        .ifEmpty { j.optString("remark") }
+                        .ifEmpty { "imported-$proto" }
                     val p = Profile(
                         scope = Profile.Scope.FREE,
-                        name = j.optString("remark").ifEmpty { "imported-$proto" },
+                        name = display,
                         protocol = Profile.Protocol.valueOf(proto.uppercase()),
                         address = "", port = 0, rawJson = ob.toString(),
                     )
@@ -265,9 +272,30 @@ class ShareLinkParser @Inject constructor() {
     private fun fillFromRawOutbound(base: Profile, ob: org.json.JSONObject): Profile? {
         return try {
             val settings = ob.optJSONObject("settings") ?: return null
-            val vnextArr = settings.optJSONArray("vnext") ?: settings.optJSONArray("servers") ?: return null
-            if (vnextArr.length() == 0) return null
-            val v = vnextArr.getJSONObject(0)
+            // two shapes exist in the wild: standard Xray (vnext/servers arrays)
+            // and the FLAT v2rayNG full-config export where address/id/port sit
+            // directly inside settings — treat settings itself as the server
+            val vnextArr = settings.optJSONArray("vnext")
+                ?: settings.optJSONArray("servers")
+            val v = if (vnextArr != null && vnextArr.length() > 0) {
+                vnextArr.getJSONObject(0)
+            } else if (settings.has("address")) {
+                settings  // flat shape
+            } else {
+                return null
+            }
+            // vless/vmess: user identity sits in users[0] of the vnext entry,
+            // NOT on the entry itself — reading v.optString("id") there gave
+            // an empty uuid and the imported config could never connect/ping
+            val u0 = v.optJSONArray("users")?.optJSONObject(0)
+            // vless post-quantum encryption lives on the user object; without
+            // carrying it the built config sends "none" and the server rejects
+            // the handshake -> imported config never connects/pings
+            val enc = u0?.optString("encryption")?.takeIf {
+                it.isNotEmpty() && it != "none"
+            } ?: settings.optString("encryption").takeIf {
+                it.isNotEmpty() && it != "none"
+            }
             val stream = ob.optJSONObject("streamSettings") ?: org.json.JSONObject()
             val sec = stream.optString("security", "none")
             val tls = stream.optJSONObject("tlsSettings")
@@ -275,14 +303,25 @@ class ShareLinkParser @Inject constructor() {
             val ws = stream.optJSONObject("wsSettings")
             val grpc = stream.optJSONObject("grpcSettings")
             val tcp = stream.optJSONObject("tcpSettings")
+            // XHTTP transports carry their routing in xhttpSettings — without
+            // reading it, path/host are lost and the built config dials the
+            // server root instead of the configured path
+            val xhttp = stream.optJSONObject("xhttpSettings")
+            // httpupgrade shares the {host, path} shape of ws/xhttp — without
+            // reading it, the built config dials the server root and the
+            // handshake never completes
+            val hu = stream.optJSONObject("httpupgradeSettings")
             base.copy(
                 address = v.optString("address"),
                 port = v.optInt("port"),
-                uuid = v.optString("id").takeIf { it.isNotEmpty() }
-                    ?: v.optString("password").takeIf { it.isNotEmpty() },
+                uuid = v.optString("password").takeIf { it.isNotEmpty() }
+                    ?: u0?.optString("id")?.takeIf { it.isNotEmpty() }
+                    ?: v.optString("id").takeIf { it.isNotEmpty() },
+                encryption = enc,
                 method = v.optString("method").takeIf { it.isNotEmpty() },
-                alterId = v.optInt("alterId", 0),
-                flow = v.optString("flow").takeIf { it.isNotEmpty() },
+                alterId = u0?.optInt("alterId", 0) ?: v.optInt("alterId", 0),
+                flow = u0?.optString("flow")?.takeIf { it.isNotEmpty() }
+                    ?: v.optString("flow").takeIf { it.isNotEmpty() },
                 network = transport(stream.optString("network", "tcp")),
                 security = when (sec) {
                     "tls" -> Profile.Security.TLS
@@ -295,8 +334,13 @@ class ShareLinkParser @Inject constructor() {
                     ?: reality?.optString("fingerprint")?.takeIf { it.isNotEmpty() },
                 publicKey = reality?.optString("publicKey")?.takeIf { it.isNotEmpty() },
                 shortId = reality?.optString("shortId")?.takeIf { it.isNotEmpty() },
-                host = ws?.optJSONObject("headers")?.optString("Host")?.takeIf { it.isNotEmpty() },
-                path = ws?.optString("path")?.takeIf { it.isNotEmpty() },
+                spiderX = reality?.optString("spiderX")?.takeIf { it.isNotEmpty() },
+                host = ws?.optJSONObject("headers")?.optString("Host")?.takeIf { it.isNotEmpty() }
+                    ?: xhttp?.optString("host")?.takeIf { it.isNotEmpty() }
+                    ?: hu?.optString("host")?.takeIf { it.isNotEmpty() },
+                path = ws?.optString("path")?.takeIf { it.isNotEmpty() }
+                    ?: xhttp?.optString("path")?.takeIf { it.isNotEmpty() }
+                    ?: hu?.optString("path")?.takeIf { it.isNotEmpty() },
                 serviceName = grpc?.optString("serviceName")?.takeIf { it.isNotEmpty() },
             )
         } catch (_: Exception) { null }
