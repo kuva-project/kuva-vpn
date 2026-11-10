@@ -1,10 +1,20 @@
 # KUVAVpn
 
+[English](README.md) | [فارسی](README.fa.md)
+
+<p align="center">
+  <img src="art/brand/kuva_logo.png" alt="KUVAVpn" width="220"/>
+</p>
+
+<p align="center">
+  <img src="art/screenshots/dashboard.png" width="200"/>&nbsp;&nbsp;
+  <img src="art/screenshots/free_configs.png" width="200"/>&nbsp;&nbsp;
+  <img src="art/screenshots/settings.png" width="200"/>
+</p>
+
 Premium Android VPN client powered by **Xray-core** (VLESS / VMess / Trojan /
 Shadowsocks / SOCKS / HTTP; REALITY, TLS, WebSocket, gRPC, HTTP/2, HTTPUpgrade,
 XHTTP transports). Kotlin + Jetpack Compose (Material 3), Clean Architecture + MVVM.
-
-![brand](art/brand/app_icon_1024.png)
 
 ## Feature map
 
