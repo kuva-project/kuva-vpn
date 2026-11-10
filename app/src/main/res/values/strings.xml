@@ -205,6 +205,8 @@
     <string name="update_downloading">Downloading… %s</string>
     <string name="update_install_prompt">The system install dialog will appear — confirm to update. Your data is kept.</string>
     <string name="update_need_permission">Install permission needed — tap to allow</string>
+    <string name="battery_optimization">Battery optimization active</string>
+    <string name="battery_optimization_desc">Android may kill the VPN in background — tap to allow unrestricted battery use</string>
     <string name="update_failed">Update failed: %s</string>
     <string name="privacy">Privacy policy</string>
     <string name="licenses">Open-source licenses</string>

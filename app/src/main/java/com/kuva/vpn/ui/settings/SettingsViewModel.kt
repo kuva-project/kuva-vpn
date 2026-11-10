@@ -186,6 +186,28 @@ class SettingsViewModel @Inject constructor(
         _updateState.value = UpdateState.Idle
     }
 
+    /** True while this app is ON the battery-optimization list (i.e. the OS
+     *  may kill the VPN tunnel in the background). */
+    val batteryRestricted = androidx.compose.runtime.mutableStateOf(false)
+
+    /** Refreshes the battery-optimization flag (call on resume). */
+    fun refreshBatteryRestricted() {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        batteryRestricted.value = !pm.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    /** Opens the system battery-optimization screen for this app. */
+    fun openBatteryOptimizationSettings() {
+        runCatching {
+            context.startActivity(
+                android.content.Intent(
+                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    android.net.Uri.parse("package:" + context.packageName),
+                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+
     /** Opens the system "install unknown apps" screen for this app, then
      *  resets the flow so the user can retry the download. */
     fun openInstallPermissionSettings() {

@@ -59,6 +59,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val geoState by viewModel.geoState.collectAsStateWithLifecycle()
     val geoMessage by viewModel.geoMessage.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val batteryRestricted = viewModel.batteryRestricted.value
+
+    // refresh the battery-optimization flag every time settings opens/resumes
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.refreshBatteryRestricted()
+    }
     // which numeric editor is open (null = none)
     var editing by remember { mutableStateOf<NumField?>(null) }
 
@@ -184,6 +190,13 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 s.killSwitch,
                 viewModel::setKillSwitch,
             )
+            if (batteryRestricted) {
+                ValueRow(
+                    stringResource(R.string.battery_optimization),
+                    stringResource(R.string.battery_optimization_desc),
+                    onClick = { viewModel.openBatteryOptimizationSettings() },
+                )
+            }
             SwitchRow(
                 stringResource(R.string.bypass_iran),
                 stringResource(R.string.bypass_iran_desc),

@@ -17,6 +17,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -223,7 +224,7 @@ class ConfigTester @Inject constructor(
                 val start = System.nanoTime()
                 val req = Request.Builder()
                     .url("https://speed.cloudflare.com/__up")
-                    .post(RequestBody.create("application/octet-stream".toMediaType(), payload))
+                    .post(payload.toRequestBody("application/octet-stream".toMediaType()))
                     .build()
                 client.newCall(req).execute().use { }
                 val elapsedMs = (System.nanoTime() - start) / 1_000_000

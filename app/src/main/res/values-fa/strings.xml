@@ -186,6 +186,8 @@
     <string name="geo_update">به‌روزرسانی از گیت‌هاب</string>
     <string name="geo_reset">بازگردانی نسخه‌ی باندل</string>
     <string name="update_need_permission">اجازه‌ی نصب لازم است — برای اجازه‌دادن لمس کنید</string>
+    <string name="battery_optimization">بهینه‌سازی باتری فعال است</string>
+    <string name="battery_optimization_desc">اندروید ممکن است VPN را در پس‌زمینه بکشد — برای اجازه‌دادن به مصرف آزاد باتری لمس کنید</string>
     <string name="share_core_log">ارسال لاگ هسته</string>
     <string name="no_core_log">هنوز لاگی نیست — اول وصل شوید</string>
     <string name="kill_switch_desc">اگر تونل قطع شود همه ترافیک مسدود می‌شود (اندروید ۱۰ به بالا)</string>
