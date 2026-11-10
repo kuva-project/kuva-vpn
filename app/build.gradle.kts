@@ -16,7 +16,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0.2"
+        versionName = "1.0.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         ndk {
@@ -71,7 +71,7 @@ android {
                         .outputFile.name  // e.g. "app-arm64-v8a-release.apk", "app-universal-release.apk"
                     val abi = out.substringBefore("-release.apk").substringAfter("app-", "")
                     (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl)
-                        .outputFileName = "KUVAVpn-v1.0.2-" + abi + ".apk"
+                        .outputFileName = "KUVAVpn-v1.0.3-" + abi + ".apk"
                 }
             }
         }
@@ -137,7 +137,7 @@ androidComponents {
                 "x86_64" -> 5
                 else -> 1
             }
-            output.versionCode.set(code * 1000 + 3)
+            output.versionCode.set(code * 1000 + 4)
         }
     }
 }

@@ -126,6 +126,9 @@ class SettingsViewModel @Inject constructor(
         data class Downloading(val percent: Int) : UpdateState()
         /** APK staged with the system installer; the OS prompt is next. */
         data object InstallPrompted : UpdateState()
+        /** "Install unknown apps" not granted for this app — PackageInstaller
+         *  would fail silently, so ask for it first. */
+        data object PermissionNeeded : UpdateState()
         data class Failed(val message: String) : UpdateState()
     }
 
@@ -159,6 +162,12 @@ class SettingsViewModel @Inject constructor(
 
     fun downloadAndInstall(version: String, assetName: String, assetUrl: String) {
         if (_updateState.value is UpdateState.Downloading) return
+        // without "install unknown apps" the PackageInstaller commit fails
+        // silently — request it first, then the user retries the download
+        if (!context.packageManager.canRequestPackageInstalls()) {
+            _updateState.value = UpdateState.PermissionNeeded
+            return
+        }
         _updateState.value = UpdateState.Downloading(0)
         viewModelScope.launch {
             try {
@@ -174,6 +183,20 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun dismissUpdateState() {
+        _updateState.value = UpdateState.Idle
+    }
+
+    /** Opens the system "install unknown apps" screen for this app, then
+     *  resets the flow so the user can retry the download. */
+    fun openInstallPermissionSettings() {
+        runCatching {
+            context.startActivity(
+                android.content.Intent(
+                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    android.net.Uri.parse("package:" + context.packageName),
+                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
         _updateState.value = UpdateState.Idle
     }
 

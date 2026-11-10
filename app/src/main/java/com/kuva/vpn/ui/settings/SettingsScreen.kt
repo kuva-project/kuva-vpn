@@ -261,6 +261,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     stringResource(R.string.update_install_prompt),
                     onClick = { viewModel.dismissUpdateState() },
                 )
+                is SettingsViewModel.UpdateState.PermissionNeeded -> ValueRow(
+                    stringResource(R.string.update_check),
+                    stringResource(R.string.update_need_permission),
+                    onClick = { viewModel.openInstallPermissionSettings() },
+                )
                 is SettingsViewModel.UpdateState.Failed -> ValueRow(
                     stringResource(R.string.update_check),
                     stringResource(R.string.update_failed, u.message),

@@ -170,6 +170,54 @@ class GitHubUpdater @Inject constructor() {
                 android.app.PendingIntent.FLAG_UPDATE_CURRENT or
                     android.app.PendingIntent.FLAG_MUTABLE,
             )
+            // The installer reports back on this action. While the session
+            // waits for the user it broadcasts STATUS_PENDING_USER_ACTION
+            // carrying the confirm Intent — WITHOUT launching that intent the
+            // dialog never appears and the session dies silently (the old
+            // bug: a receiver action existed but no receiver was ever
+            // registered, so "install" did nothing).
+            // holder indirection: the receiver needs its own reference to
+            // unregister itself, but a val cannot be read inside its own
+            // initializer in Kotlin
+            val holder = arrayOfNulls<android.content.BroadcastReceiver>(1)
+            val receiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(c: Context, i: android.content.Intent) {
+                    try {
+                        when (i.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)) {
+                            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                                // Intent.EXTRA_INTENT (not PackageInstaller.EXTRA_INTENT —
+                                // that constant only exists on API 34+; the official
+                                // sample reads the confirm intent from Intent.EXTRA_INTENT)
+                                val confirm = i.getParcelableExtra<android.content.Intent>(
+                                    android.content.Intent.EXTRA_INTENT)
+                                if (confirm != null) {
+                                    confirm.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    c.startActivity(confirm)
+                                    Log.i(TAG, "install confirm dialog launched")
+                                }
+                            }
+                            PackageInstaller.STATUS_SUCCESS ->
+                                Log.i(TAG, "install succeeded")
+                            else -> Log.w(TAG, "install status: " +
+                                i.getIntExtra(PackageInstaller.EXTRA_STATUS, -1) + " " +
+                                i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
+                        }
+                    } finally {
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            runCatching {
+                                holder[0]?.let { c.applicationContext.unregisterReceiver(it) }
+                            }
+                        }
+                    }
+                }
+            }
+            androidx.core.content.ContextCompat.registerReceiver(
+                ctx.applicationContext,
+                receiver,
+                android.content.IntentFilter("com.kuva.vpn.INSTALL_COMMITTED"),
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            holder[0] = receiver
             session.commit(pending.intentSender)
             Log.i(TAG, "install session committed: ${apk.name} (${apk.length()} B)")
         } catch (t: Throwable) {
