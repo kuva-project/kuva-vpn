@@ -90,9 +90,12 @@ kuva-vpn/
 (تنظیم یک‌باره‌ی ابزارها + دو دستور بیلد).
 
 ```powershell
-.\gradlew.bat assembleDebug     # نسخه‌ی تست
-.\gradlew.bat assembleRelease   # نسخه‌ی امضاشده (نیازمند keystore خودت)
+.\gradlew.bat assembleDebug     # debug build
+.\gradlew.bat assembleRelease   # signed release — requires your own keystore
 ```
+
+دستور اول نسخه‌ی تست و دستور دوم نسخه‌ی امضاشده‌ی ریلیز را می‌سازد
+(برای ریلیز به keystore شخصی خودت نیاز داری — جزئیات در **docs/BUILDING.md**).
 
 ## حریم خصوصی
 
