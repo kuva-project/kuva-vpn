@@ -41,10 +41,7 @@ class ShareLinkBuilder @Inject constructor() {
         q["encryption"] = p.encryption?.takeIf { it.isNotBlank() } ?: "none"
         p.flow?.let { q["flow"] = it }
         q["type"] = transportName(p.network)
-        // CORRECTNESS: never invent security=tls just because an sni exists
-        // (it often comes from the ws host param on a PLAIN server). A faked
-        // TLS link is dead in every other client (V2Box/Hiddify/v2rayNG).
-        if (p.security != Profile.Security.NONE) p.sni?.let { q["sni"] = it }
+        p.sni?.let { if (q["security"] == null) q["security"] = "tls"; q["sni"] = it }
         p.host?.let { q["host"] = it }
         p.path?.let { q["path"] = it }
         p.serviceName?.let { q["serviceName"] = it }
@@ -85,7 +82,6 @@ class ShareLinkBuilder @Inject constructor() {
     private fun trojan(p: Profile): String {
         val q = sortedMapOf<String, String>()
         q["type"] = transportName(p.network)
-        if (p.security == Profile.Security.NONE) q["security"] = "none"
         p.sni?.let { q["sni"] = it }
         p.host?.let { q["host"] = it }
         p.path?.let { q["path"] = it }

@@ -188,6 +188,14 @@
     <string name="reset_settings">بازنشانی تنظیمات</string>
     <string name="reset_confirm">همه تنظیمات به حالت پیش‌فرض برگردد؟ کانفیگ‌ها حفظ می‌شوند.</string>
     <string name="about">درباره KUVA VPN</string>
+    <string name="update_check">بررسی به‌روزرسانی</string>
+    <string name="update_checking">در حال بررسی…</string>
+    <string name="update_latest">روی آخرین نسخه هستید (%s)</string>
+    <string name="update_available">نسخه‌ی %s موجود است</string>
+    <string name="update_download">دانلود و نصب</string>
+    <string name="update_downloading">در حال دانلود… %s</string>
+    <string name="update_install_prompt">پنجره‌ی نصب سیستم باز می‌شود — تأیید کنید تا آپدیت شود. داده‌های شما حفظ می‌شود.</string>
+    <string name="update_failed">آپدیت ناموفق: %s</string>
     <string name="privacy">سیاست حفظ حریم خصوصی</string>
     <string name="licenses">مجوزهای متن‌باز</string>
     <string name="version">نسخه</string>

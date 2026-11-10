@@ -15,6 +15,12 @@ class ShareLinkParser @Inject constructor() {
 
     fun parse(text: String): List<Profile> {
         val out = mutableListOf<Profile>()
+        // Pretty-printed (multi-line) JSON: try the WHOLE text as one object
+        // first. If it is not valid JSON the per-line scan below still catches
+        // the single-line JSON case.
+        if (text.trim().startsWith("{")) {
+            parseRawJson(text.trim())?.let { return listOf(it) }
+        }
         text.trim().lineSequence().forEach { line ->
             val l = unescapeEntities(line.trim())
             if (l.isEmpty()) return@forEach

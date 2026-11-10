@@ -197,6 +197,14 @@
     <string name="reset_settings">Reset application settings</string>
     <string name="reset_confirm">Reset all settings to defaults? Configurations are kept.</string>
     <string name="about">About KUVA VPN</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_latest">You are on the latest version (%s)</string>
+    <string name="update_available">Version %s is available</string>
+    <string name="update_download">Download &amp; install</string>
+    <string name="update_downloading">Downloading… %s</string>
+    <string name="update_install_prompt">The system install dialog will appear — confirm to update. Your data is kept.</string>
+    <string name="update_failed">Update failed: %s</string>
     <string name="privacy">Privacy policy</string>
     <string name="licenses">Open-source licenses</string>
     <string name="version">Version</string>

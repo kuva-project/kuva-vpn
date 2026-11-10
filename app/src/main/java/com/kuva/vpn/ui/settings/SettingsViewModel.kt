@@ -6,6 +6,7 @@ import com.kuva.vpn.data.settings.AppSettings
 import com.kuva.vpn.data.settings.RoutingMode
 import com.kuva.vpn.data.settings.SettingsRepository
 import android.content.Context
+import com.kuva.vpn.core.update.GitHubUpdater
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,6 +20,7 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repo: SettingsRepository,
     private val geoUpdater: com.kuva.vpn.core.engine.GeoUpdater,
+    private val updater: GitHubUpdater,
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = repo.settings
@@ -108,6 +110,71 @@ class SettingsViewModel @Inject constructor(
         val f = com.kuva.vpn.core.engine.CoreLogStore.snapshotFile(context) ?: return null
         return androidx.core.content.FileProvider.getUriForFile(
             context, context.packageName + ".fileprovider", f)
+    }
+
+    // ---------------- in-app update (GitHub Releases) ----------------
+
+    sealed class UpdateState {
+        data object Idle : UpdateState()
+        data object Checking : UpdateState()
+        data object UpToDate : UpdateState()
+        data class Available(
+            val version: String,
+            val assetName: String,
+            val assetUrl: String,
+        ) : UpdateState()
+        data class Downloading(val percent: Int) : UpdateState()
+        /** APK staged with the system installer; the OS prompt is next. */
+        data object InstallPrompted : UpdateState()
+        data class Failed(val message: String) : UpdateState()
+    }
+
+    private val _updateState = kotlinx.coroutines.flow.MutableStateFlow<UpdateState>(
+        UpdateState.Idle
+    )
+    val updateState: kotlinx.coroutines.flow.StateFlow<UpdateState> = _updateState
+
+    fun checkForUpdates() {
+        if (_updateState.value is UpdateState.Checking ||
+            _updateState.value is UpdateState.Downloading
+        ) return
+        _updateState.value = UpdateState.Checking
+        viewModelScope.launch {
+            try {
+                val r = updater.check(com.kuva.vpn.BuildConfig.VERSION_NAME)
+                _updateState.value = if (r.updateAvailable && r.assetUrl != null) {
+                    UpdateState.Available(
+                        version = r.latestVersion,
+                        assetName = r.assetName ?: "",
+                        assetUrl = r.assetUrl,
+                    )
+                } else {
+                    UpdateState.UpToDate
+                }
+            } catch (t: Throwable) {
+                _updateState.value = UpdateState.Failed(t.message ?: "network error")
+            }
+        }
+    }
+
+    fun downloadAndInstall(version: String, assetName: String, assetUrl: String) {
+        if (_updateState.value is UpdateState.Downloading) return
+        _updateState.value = UpdateState.Downloading(0)
+        viewModelScope.launch {
+            try {
+                val apk = updater.download(assetUrl, assetName, context) { pct ->
+                    _updateState.value = UpdateState.Downloading(pct)
+                }
+                updater.install(apk, context)
+                _updateState.value = UpdateState.InstallPrompted
+            } catch (t: Throwable) {
+                _updateState.value = UpdateState.Failed(t.message ?: "download failed")
+            }
+        }
+    }
+
+    fun dismissUpdateState() {
+        _updateState.value = UpdateState.Idle
     }
 
     fun openAppPicker() { /* nav event */ }

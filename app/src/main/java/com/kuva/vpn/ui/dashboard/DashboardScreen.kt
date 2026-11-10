@@ -7,7 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -63,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kuva.vpn.R
+import com.kuva.vpn.ui.common.CountryFlag
 import com.kuva.vpn.domain.model.ConnectionState
 import com.kuva.vpn.util.Formatters
 import com.kuva.vpn.ui.theme.Gold
@@ -553,17 +553,11 @@ private fun ExitTile(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.width(90.dp))
-                if (countryIso != null) {
-                    AsyncImage(
-                        model = "https://flagcdn.com/w40/${countryIso.lowercase()}.png",
-                        contentDescription = null,
-                        modifier = Modifier
-                            .padding(end = 6.dp)
-                            .size(width = 21.dp, height = 15.dp)  // ~ bodyMedium line height
-                            .clip(RoundedCornerShape(3.dp)),
-                        contentScale = ContentScale.Crop,
-                    )
-                }
+                // bundled flag (offline) — no flagcdn.com round-trip
+                CountryFlag(
+                    iso = countryIso,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
                 Text(
                     location ?: stringResource(R.string.no_location),
                     style = MaterialTheme.typography.bodyMedium,

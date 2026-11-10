@@ -58,6 +58,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var showGeoInfo by remember { mutableStateOf(false) }
     val geoState by viewModel.geoState.collectAsStateWithLifecycle()
     val geoMessage by viewModel.geoMessage.collectAsStateWithLifecycle()
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     // which numeric editor is open (null = none)
     var editing by remember { mutableStateOf<NumField?>(null) }
 
@@ -219,6 +220,62 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
 
         // ---------- about ----------
         SectionCard(stringResource(R.string.about)) {
+            // ---------- in-app update ----------
+            when (val u = updateState) {
+                is SettingsViewModel.UpdateState.Idle -> Unit
+                is SettingsViewModel.UpdateState.Checking -> ValueRow(
+                    stringResource(R.string.update_check),
+                    stringResource(R.string.update_checking),
+                    onClick = {},
+                )
+                is SettingsViewModel.UpdateState.UpToDate -> ValueRow(
+                    stringResource(R.string.update_check),
+                    stringResource(
+                        R.string.update_latest,
+                        com.kuva.vpn.BuildConfig.VERSION_NAME,
+                    ),
+                    onClick = { viewModel.dismissUpdateState() },
+                )
+                is SettingsViewModel.UpdateState.Available -> {
+                    ValueRow(
+                        stringResource(R.string.update_available, u.version),
+                        stringResource(R.string.update_download),
+                        onClick = {
+                            viewModel.downloadAndInstall(u.version, u.assetName, u.assetUrl)
+                        },
+                    )
+                    Text(
+                        stringResource(R.string.update_install_prompt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+                is SettingsViewModel.UpdateState.Downloading -> ValueRow(
+                    stringResource(R.string.update_download),
+                    stringResource(R.string.update_downloading, "${u.percent}%"),
+                    onClick = {},
+                )
+                is SettingsViewModel.UpdateState.InstallPrompted -> ValueRow(
+                    stringResource(R.string.update_check),
+                    stringResource(R.string.update_install_prompt),
+                    onClick = { viewModel.dismissUpdateState() },
+                )
+                is SettingsViewModel.UpdateState.Failed -> ValueRow(
+                    stringResource(R.string.update_check),
+                    stringResource(R.string.update_failed, u.message),
+                    onClick = { viewModel.dismissUpdateState() },
+                )
+            }
+            // action row only while idle: while checking/downloading the state
+            // row above already stands in its place (no duplicated title)
+            if (updateState is SettingsViewModel.UpdateState.Idle) {
+                ValueRow(
+                    stringResource(R.string.update_check),
+                    "",
+                    onClick = { viewModel.checkForUpdates() },
+                )
+            }
             ValueRow(
                 stringResource(R.string.geo_assets),
                 geoState.source.ifBlank {
