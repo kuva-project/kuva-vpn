@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+app/build/
+core-engine/build/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Native libs & engine artifacts (built per docs/BUILDING.md — never commit)
+*.aar
+*.so
+!core-engine/libs/README.md
+
+# Signing
+*.jks
+*.keystore
+keystore.properties
+
+# Logs & misc
+*.log
+captures/

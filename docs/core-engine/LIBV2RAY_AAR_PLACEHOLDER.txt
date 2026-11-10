@@ -1,0 +1,1 @@
+See docs/BUILDING.md step 1: gomobile bind output -> core-engine/libv2ray.aar
