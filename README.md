@@ -56,7 +56,22 @@ kuva-vpn/
 
 ## Quick start
 
-See **docs/BUILDING.md** (one-time toolchain setup + two build commands).
+**Just want the app?** Download the latest APK from
+[**Releases**](https://github.com/kuva-project/kuva-vpn/releases/latest):
+
+| File | For |
+|---|---|
+| `KUVAVpn-v1.0.0-arm64-v8a.apk` | All modern phones (recommended) |
+| `KUVAVpn-v1.0.0-armeabi-v7a.apk` | Older 32-bit phones |
+| `KUVAVpn-v1.0.0-x86.apk` / `KUVAVpn-v1.0.0-x86_64.apk` | Intel tablets / emulators |
+| `KUVAVpn-v1.0.0-universal.apk` | Works on any device (larger) |
+
+Minimum Android: **8.0 (API 26)**. The APK is signed; Google Play Protect may
+show a "scan recommended" notice on first install because the app is new —
+scanning is safe.
+
+**Building from source:** see **docs/BUILDING.md** (one-time toolchain setup +
+two build commands).
 
 ## Privacy
 
