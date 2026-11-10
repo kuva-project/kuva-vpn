@@ -25,6 +25,16 @@ android {
         }
     }
 
+    splits {
+        abi {
+            // Per-ABI release APKs + one universal APK (GitHub Releases / sideload).
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     signingConfigs {
         create("release") {
             // Supply securely via ~/.gradle/gradle.properties or env vars — never commit secrets.
@@ -47,6 +57,18 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
+
+            // Clean output names: KUVAVpn-v1.0.0-arm64-v8a.apk etc.
+            // (per-ABI versionCode is set in androidComponents below)
+            applicationVariants.all {
+                outputs.all {
+                    val out = (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl)
+                        .outputFile.name  // e.g. "app-arm64-v8a-release.apk", "app-universal-release.apk"
+                    val abi = out.substringBefore("-release.apk").substringAfter("app-", "")
+                    (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl)
+                        .outputFileName = "KUVAVpn-v1.0.0-" + abi + ".apk"
+                }
+            }
         }
         debug {
             applicationIdSuffix = ".debug"
@@ -92,6 +114,26 @@ android {
             "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
             "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
         )
+    }
+}
+
+// Per-ABI versionCode: universal < v7a < arm64 < x86 < x86_64 (AGP 8 variant API).
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.outputs.forEach { output ->
+            val abi = output.filters.firstOrNull {
+                it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI
+            }?.identifier ?: "universal"
+            val code = when (abi) {
+                "universal" -> 1
+                "armeabi-v7a" -> 2
+                "arm64-v8a" -> 3
+                "x86" -> 4
+                "x86_64" -> 5
+                else -> 1
+            }
+            output.versionCode.set(code * 1000 + 1)
+        }
     }
 }
 
