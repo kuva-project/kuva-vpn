@@ -61,14 +61,27 @@ kuva-vpn/
 
 | File | For |
 |---|---|
-| `KUVAVpn-v1.0.0-arm64-v8a.apk` | All modern phones (recommended) |
-| `KUVAVpn-v1.0.0-armeabi-v7a.apk` | Older 32-bit phones |
-| `KUVAVpn-v1.0.0-x86.apk` / `KUVAVpn-v1.0.0-x86_64.apk` | Intel tablets / emulators |
-| `KUVAVpn-v1.0.0-universal.apk` | Works on any device (larger) |
+| `KUVAVpn-v1.0.3-arm64-v8a.apk` | All modern phones (recommended) |
+| `KUVAVpn-v1.0.3-armeabi-v7a.apk` | Older 32-bit phones |
+| `KUVAVpn-v1.0.3-x86.apk` / `KUVAVpn-v1.0.3-x86_64.apk` | Intel tablets / emulators |
+| `KUVAVpn-v1.0.3-universal.apk` | Works on any device (larger) |
 
-Minimum Android: **8.0 (API 26)**. The APK is signed; Google Play Protect may
-show a "scan recommended" notice on first install because the app is new —
-scanning is safe.
+Minimum Android: **8.0 (API 26)**.
+
+> **⚠️ Google Play Protect notice:** because the APK is downloaded from GitHub
+> (outside Google Play), Play Protect may show *"Harmful app blocked — this app
+> may be harmful"* on first install. Tap **Install anyway** — the release APKs
+> are built and published directly in this repository and scan clean on
+> [VirusTotal](https://www.virustotal.com/) (0/68 engines). A Play Protect
+> appeal has been filed with Google to lift the warning.
+
+### Updating
+
+The app checks GitHub Releases for newer versions: **Settings → About KUVA VPN
+→ Check for updates**. If a new version is found, tap **Download & install**
+and confirm the system install dialog — your profiles and settings are kept.
+First time only: if the app shows *"Install permission needed"*, tap it and
+allow **Install unknown apps** for KUVAVpn, then retry.
 
 **Building from source:** see **docs/BUILDING.md** (one-time toolchain setup +
 two build commands).

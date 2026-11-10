@@ -179,6 +179,15 @@
     <string name="mode_best_perf">بهترین عملکرد</string>
     <string name="security">امنیت</string>
     <string name="kill_switch">کلید قطع اضطراری (Kill Switch)</string>
+    <string name="bypass_iran">دور زدن سایت‌های ایرانی</string>
+    <string name="bypass_iran_desc">دامنه‌ها و IPهای ایران مستقیم وصل می‌شوند — بانک و سامانه‌های دولتی با VPN روشن کار می‌کنند</string>
+    <string name="geo_assets">دیتابیس‌های Geo</string>
+    <string name="geo_assets_desc">دیتابیس‌های مسیریابی (geoip.dat / geosite.dat) از Loyalsoldier/v2ray-rules-dat در گیت‌هاب. «به‌روزرسانی» آخرین نسخه را می‌گیرد؛ «بازگردانی» نسخه‌ی همراه اپ را برمی‌گرداند. تغییرات در اتصال بعدی اعمال می‌شود.</string>
+    <string name="geo_update">به‌روزرسانی از گیت‌هاب</string>
+    <string name="geo_reset">بازگردانی نسخه‌ی باندل</string>
+    <string name="update_need_permission">اجازه‌ی نصب لازم است — برای اجازه‌دادن لمس کنید</string>
+    <string name="share_core_log">ارسال لاگ هسته</string>
+    <string name="no_core_log">هنوز لاگی نیست — اول وصل شوید</string>
     <string name="kill_switch_desc">اگر تونل قطع شود همه ترافیک مسدود می‌شود (اندروید ۱۰ به بالا)</string>
     <string name="ipv6">پشتیبانی IPv6</string>
     <string name="split_tunneling">تقسیم تونل</string>
