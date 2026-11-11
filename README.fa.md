@@ -12,15 +12,18 @@
   <img src="art/screenshots/settings.png" width="200"/>
 </p>
 
-کلاینت وی‌پی‌ان اندروید با هسته‌ی **Xray-core** — پشتیبانی از VLESS / VMess /
-Trojan / Shadowsocks / SOCKS / HTTP و ترنسپورت‌های REALITY، TLS، WebSocket،
-gRPC، HTTP/2، HTTPUpgrade و XHTTP. ساخته‌شده با Kotlin و Jetpack Compose
-(Material 3) بر پایه‌ی معماری Clean Architecture و MVVM.
+کلاینت وی‌پی‌ان اندروید با **دو موتور**: هسته‌ی کلاسیک **Xray-core** با پشتیبانی
+از VLESS / VMess / Trojan / Shadowsocks / SOCKS / HTTP و ترنسپورت‌های REALITY،
+TLS، WebSocket، gRPC، HTTP/2، HTTPUpgrade و XHTTP — و موتور بدون سرور
+**Kuva Swift** (MASQUE با هسته‌ی متن‌باز Aether، AGPL-3.0) که بدون هیچ پروفایلی
+وصل می‌شود. ساخته‌شده با Kotlin و Jetpack Compose (Material 3) بر پایه‌ی
+معماری Clean Architecture و MVVM.
 
 ## قابلیت‌ها
 
 | بخش | توضیح |
 |---|---|
+| موتور Kuva Swift | اتصال بدون سرور (MASQUE / HTTP-2 + تکه‌تکه‌کردن ClientHello) بدون هیچ پروفایلی؛ هسته‌ی Aether v2.4.0 باندل‌شده (AGPL-3.0)؛ سوییچ موتور در صفحه اصلی و تنظیمات | `core/swift/`, `ui/configless/` |
 | تانل واقعی | `VpnService` (TUN) + hev-socks5-tunnel + هسته‌ی Xray |
 | پارس کانفیگ | لینک‌های اشتراک vless/vmess/trojan/ss/socks/http و JSON خام Xray — مقاوم در برابر ورودی خراب |
 | ساخت کانفیگ | تولید کامل JSON هسته (inbound، DNS، routing، REALITY/TLS) |
@@ -64,10 +67,10 @@ kuva-vpn/
 
 | فایل | مناسب برای |
 |---|---|
-| `KUVAVpn-v1.0.3-arm64-v8a.apk` | همه‌ی گوشی‌های مدرن (پیشنهادی) |
-| `KUVAVpn-v1.0.3-armeabi-v7a.apk` | گوشی‌های قدیمی ۳۲ بیتی |
-| `KUVAVpn-v1.0.3-x86.apk` / `KUVAVpn-v1.0.3-x86_64.apk` | تبلت‌های اینتل / شبیه‌سازها |
-| `KUVAVpn-v1.0.3-universal.apk` | هر دستگاهی (حجم بیشتر) |
+| `KUVAVpn-v1.1.0-arm64-v8a.apk` | همه‌ی گوشی‌های مدرن (پیشنهادی) |
+| `KUVAVpn-v1.1.0-armeabi-v7a.apk` | گوشی‌های قدیمی ۳۲ بیتی |
+| `KUVAVpn-v1.1.0-x86.apk` / `KUVAVpn-v1.1.0-x86_64.apk` | تبلت‌های اینتل / شبیه‌سازها |
+| `KUVAVpn-v1.1.0-universal.apk` | هر دستگاهی (حجم بیشتر) |
 
 حداقل اندروید: **۸.۰ (API 26)**.
 

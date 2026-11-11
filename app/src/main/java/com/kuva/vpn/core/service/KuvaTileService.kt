@@ -36,6 +36,10 @@ class KuvaTileService : TileService() {
                 tile.state = Tile.STATE_ACTIVE
                 tile.subtitle = "Connecting…"
             }
+            is ConnectionState.SwiftConnecting -> {
+                tile.state = Tile.STATE_ACTIVE
+                tile.subtitle = "Searching for route…"
+            }
             else -> {
                 tile.state = Tile.STATE_INACTIVE
                 tile.subtitle = "Disconnected"

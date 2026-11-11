@@ -22,6 +22,7 @@
     <!-- Connection states -->
     <string name="state_disconnected">قطع است</string>
     <string name="state_connecting">در حال اتصال…</string>
+    <string name="state_swift_scanning">در حال جستجوی مسیر…</string>
     <string name="state_connected">متصل</string>
     <string name="state_disconnecting">در حال قطع…</string>
     <string name="state_error">خطای اتصال</string>
@@ -174,6 +175,16 @@
     <string name="retry_interval">فاصله تلاش مجدد (ثانیه)</string>
     <string name="auto_ping">پینگ خودکار پس از وارد کردن</string>
     <string name="auto_select_mode">انتخاب سرور</string>
+    <string name="engine_mode">موتور اتصال</string>
+    <string name="engine_xray">هسته‌ی ایکس‌ری</string>
+    <string name="engine_xray_desc">موتور کامل Xray — از پروفایل‌های «رایگان» و «شخصی» استفاده می‌کند.</string>
+    <string name="engine_swift">کووا سوئیفت</string>
+    <string name="swift_card_desc">اتصال بدون سرور — هسته خودش بهترین مسیر را پیدا می‌کند.</string>
+    <string name="swift_row_engine">موتور</string>
+    <string name="swift_row_route">مسیر</string>
+    <string name="swift_row_auto">خودکار</string>
+    <string name="engine_swift_desc">موتور بدون کانفیگ MASQUE — بدون هیچ پروفایلی وصل می‌شود و مسیر را خودش پیدا می‌کند.</string>
+    <string name="about_swift_attribution">کووا سوئیفت — مبتنی بر هسته‌ی متن‌باز Aether (AGPL-3.0).</string>
     <string name="mode_manual">دستی</string>
     <string name="mode_lowest_ping">کم‌ترین پینگ</string>
     <string name="mode_best_perf">بهترین عملکرد</string>
@@ -206,6 +217,8 @@
     <string name="update_download">دانلود و نصب</string>
     <string name="update_downloading">در حال دانلود… %s</string>
     <string name="update_install_prompt">پنجره‌ی نصب سیستم باز می‌شود — تأیید کنید تا آپدیت شود. داده‌های شما حفظ می‌شود.</string>
+    <string name="update_banner_title">نسخه‌ی جدید برنامه در دسترس است</string>
+    <string name="update_banner_body">برای به‌روزرسانی، به منوی تنظیمات و قسمت «درباره» مراجعه کنید.</string>
     <string name="update_failed">آپدیت ناموفق: %s</string>
     <string name="privacy">سیاست حفظ حریم خصوصی</string>
     <string name="licenses">مجوزهای متن‌باز</string>

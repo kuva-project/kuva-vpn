@@ -71,6 +71,20 @@ import com.kuva.vpn.ui.theme.StatusGray
 import com.kuva.vpn.ui.theme.StatusGreen
 import com.kuva.vpn.ui.theme.StatusOrange
 import com.kuva.vpn.ui.theme.StatusRed
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.rememberUpdatedState
+
+// bright neon blue for the engine-switch active state
+private val NeonSwitchBlue = Color(0xFF33CCFF)
 
 /**
  * Main dashboard, modeled on the reference screenshots: centered power button,
@@ -90,8 +104,22 @@ fun DashboardScreen(
 
     // back on the dashboard opens the exit popup: Exit / Keep in background / Cancel
     var showExitDialog by remember { mutableStateOf(false) }
-    androidx.activity.compose.BackHandler { showExitDialog = true }
+
     val exitContext = androidx.compose.ui.platform.LocalContext.current
+
+    // update banner: KuvaApplication checks GitHub once per app start; when a
+    // newer release exists, show the banner for 8 seconds
+    val appUpdateAvailable by (exitContext.applicationContext as com.kuva.vpn.KuvaApplication)
+        .updateAvailable.collectAsState()
+    var showUpdateBanner by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(appUpdateAvailable) {
+        if (appUpdateAvailable) {
+            showUpdateBanner = true
+            kotlinx.coroutines.delay(8000)   // visible ~8s, then fades out
+            showUpdateBanner = false
+        }
+    }
+    androidx.activity.compose.BackHandler { showExitDialog = true }
 
     if (showExitDialog) {
         // ---- 3D embossed exit dialog (user request) ----
@@ -150,6 +178,10 @@ fun DashboardScreen(
                                     // stop the tunnel if running, then close the app task
                                     viewModel.requestDisconnect()
                                     (exitContext as? android.app.Activity)?.finishAffinity()
+                                    // fully end the process: a fresh process re-runs
+                                    // Application.onCreate, which resets the engine to Xray
+                                    android.os.Process.killProcess(android.os.Process.myPid())
+                                    kotlin.system.exitProcess(0)
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -260,6 +292,11 @@ fun DashboardScreen(
         }
         }  // end LTR header provider
 
+        // update-available banner (auto-dismisses after 8s)
+        androidx.compose.animation.AnimatedVisibility(visible = showUpdateBanner) {
+            UpdateBanner()
+        }
+
         Spacer(Modifier.height(12.dp))
 
         // ---------- scrollable body ----------
@@ -277,6 +314,7 @@ fun DashboardScreen(
             text = when (state) {
                 is ConnectionState.Connected -> stringResource(R.string.state_connected)
                 is ConnectionState.Connecting -> stringResource(R.string.state_connecting)
+                is ConnectionState.SwiftConnecting -> stringResource(R.string.state_swift_scanning)
                 is ConnectionState.Disconnecting -> stringResource(R.string.state_disconnecting)
                 is ConnectionState.Error -> stringResource(R.string.state_error)
                 else -> stringResource(R.string.state_disconnected)
@@ -285,6 +323,7 @@ fun DashboardScreen(
             color = when (state) {
                 is ConnectionState.Connected -> StatusGreen
                 is ConnectionState.Connecting -> StatusOrange
+                is ConnectionState.SwiftConnecting -> StatusOrange
                 is ConnectionState.Error -> StatusRed
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
             },
@@ -296,6 +335,56 @@ fun DashboardScreen(
                 color = StatusRed,
                 textAlign = TextAlign.Center,
             )
+        }
+
+        // Swift scan feedback: "searching for route…" + thin progress bar.
+        // Xray's plain Connecting… stays exactly as it was.
+        if (state is ConnectionState.SwiftConnecting) {
+            val pct = (state as ConnectionState.SwiftConnecting).progressPct
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.state_swift_scanning),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(6.dp))
+            LinearProgressIndicator(
+                progress = { pct / 100f },
+                modifier = Modifier
+                    .fillMaxWidth(0.6f)
+                    .height(4.dp),
+                color = StatusOrange,
+                trackColor = StatusOrange.copy(alpha = 0.15f),
+            )
+        }
+
+        // ---------- engine switch: labels + sliding toggle ----------
+        // LTR so Xray Core is always LEFT and Kuva Swift always RIGHT,
+        // even on Persian (RTL) layout
+        val engineMode = viewModel.engineMode.collectAsState().value
+        Spacer(Modifier.height(14.dp))
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    stringResource(R.string.engine_xray),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = if (engineMode == "xray") FontWeight.Bold else FontWeight.SemiBold,
+                    color = if (engineMode == "xray") NeonSwitchBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                EngineSwitch(
+                    swift = engineMode == "swift",
+                    onToggle = { viewModel.setEngineMode(if (engineMode == "swift") "xray" else "swift") },
+                )
+                Text(
+                    stringResource(R.string.engine_swift),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = if (engineMode == "swift") FontWeight.Bold else FontWeight.SemiBold,
+                    color = if (engineMode == "swift") NeonSwitchBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         // exit tiles stay blank until the next verified lookup after connecting
@@ -336,11 +425,16 @@ fun DashboardScreen(
         Spacer(Modifier.height(10.dp))
 
         // ---------- active config card ----------
-        ConfigCard(
-            name = selected?.name,
-            protocol = selected?.protocol?.name,
-            address = selected?.displayAddress,
-        )
+        // Swift mode has no config to show — a dedicated card replaces it
+        if (engineMode == "swift") {
+            SwiftCard()
+        } else {
+            ConfigCard(
+                name = selected?.name,
+                protocol = selected?.protocol?.name,
+                address = selected?.displayAddress,
+            )
+        }
 
         Spacer(Modifier.height(24.dp))
         }
@@ -495,6 +589,114 @@ private fun StatCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+@Composable
+private fun SwiftCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.10f)
+        ),
+        shape = RoundedCornerShape(20.dp),
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text(stringResource(R.string.engine_swift), fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(R.string.swift_card_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            InfoRow(stringResource(R.string.swift_row_engine), "MASQUE")
+            InfoRow(stringResource(R.string.swift_row_route), stringResource(R.string.swift_row_auto))
+        }
+    }
+}
+
+@Composable
+private fun UpdateBanner() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(6.dp, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF1B1726))
+            .border(1.dp, Gold.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(Color(0xFFFF3B30)),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(
+                stringResource(R.string.update_banner_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = GoldLight,
+            )
+            Text(
+                stringResource(R.string.update_banner_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EngineSwitch(swift: Boolean, onToggle: () -> Unit) {
+    // gestures live across recompositions: always call the LATEST onToggle,
+    // otherwise the closure captures the engine mode of the first frame
+    // and every tap repeats that first decision
+    val currentOnToggle by rememberUpdatedState(onToggle)
+    val transition = animateFloatAsState(
+        targetValue = if (swift) 1f else 0f,
+        animationSpec = tween(220),
+        label = "engineKnob",
+    )
+    val knob = 22.dp
+    // 58 track - 4 left pad - knob - 4 right pad = 28 travel
+    val travel = 28.dp
+    Box(
+        contentAlignment = Alignment.CenterStart,
+        modifier = Modifier
+            .width(58.dp)
+            .height(30.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color.White.copy(alpha = 0.10f))
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(listOf(Gold, GoldLight)),
+                shape = RoundedCornerShape(50),
+            )
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = { currentOnToggle() },
+                ) { _, _ -> 0f }   // direction is decided on release: one gesture = one switch
+            }
+            .pointerInput(Unit) {
+                detectTapGestures { currentOnToggle() }
+            },
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = 4.dp + travel * transition.value)
+                .size(knob)
+                .clip(CircleShape)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(NeonSwitchBlue, NeonSwitchBlue.copy(alpha = 0.75f))
+                    )
+                ),
+        )
     }
 }
 

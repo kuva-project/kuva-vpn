@@ -12,7 +12,11 @@
   <img src="art/screenshots/settings.png" width="200"/>
 </p>
 
-Premium Android VPN client powered by **Xray-core** (VLESS / VMess / Trojan /
+Premium Android VPN client with **two engines**: the classic **Xray-core**
+(VLESS / VMess / Trojan / Shadowsocks / SOCKS / HTTP; REALITY, TLS, WebSocket,
+gRPC, HTTP/2, HTTPUpgrade, XHTTP transports) and the serverless **Kuva Swift**
+(MASQUE via the bundled open-source Aether core, AGPL-3.0) that connects with
+no profile at all. (VLESS / VMess / Trojan /
 Shadowsocks / SOCKS / HTTP; REALITY, TLS, WebSocket, gRPC, HTTP/2, HTTPUpgrade,
 XHTTP transports). Kotlin + Jetpack Compose (Material 3), Clean Architecture + MVVM.
 
@@ -20,6 +24,7 @@ XHTTP transports). Kotlin + Jetpack Compose (Material 3), Clean Architecture + M
 
 | Area | What's implemented | Where |
 |---|---|---|
+| Kuva Swift engine | Serverless MASQUE (HTTP/2 + TLS ClientHello fragmentation) — connects with no profile; bundled Aether v2.4.0 core (AGPL-3.0); engine switch on dashboard & Settings; per-session reset to Xray | `core/swift/`, `ui/configless/` |
 | Real VPN tunnel | `VpnService` TUN + hev-socks5-tunnel (TUN→SOCKS) + Xray core | `core/service/KuvaVpnService.kt`, `core/tunnel/Tun2Socks.kt` |
 | Config parsing | vless/vmess/trojan/ss/socks/http share links + raw Xray JSON, crash-safe | `core/config/parser/ShareLinkParser.kt` |
 | Config generation | Full Xray JSON (inbounds, DNS, routing, stats, REALITY/TLS) | `core/config/XrayConfigBuilder.kt` |
@@ -61,10 +66,10 @@ kuva-vpn/
 
 | File | For |
 |---|---|
-| `KUVAVpn-v1.0.3-arm64-v8a.apk` | All modern phones (recommended) |
-| `KUVAVpn-v1.0.3-armeabi-v7a.apk` | Older 32-bit phones |
-| `KUVAVpn-v1.0.3-x86.apk` / `KUVAVpn-v1.0.3-x86_64.apk` | Intel tablets / emulators |
-| `KUVAVpn-v1.0.3-universal.apk` | Works on any device (larger) |
+| `KUVAVpn-v1.1.0-arm64-v8a.apk` | All modern phones (recommended) |
+| `KUVAVpn-v1.1.0-armeabi-v7a.apk` | Older 32-bit phones |
+| `KUVAVpn-v1.1.0-x86.apk` / `KUVAVpn-v1.1.0-x86_64.apk` | Intel tablets / emulators |
+| `KUVAVpn-v1.1.0-universal.apk` | Works on any device (larger) |
 
 Minimum Android: **8.0 (API 26)**.
 
@@ -85,6 +90,11 @@ allow **Install unknown apps** for KUVAVpn, then retry.
 
 **Building from source:** see **docs/BUILDING.md** (one-time toolchain setup +
 two build commands).
+
+```powershell
+.\gradlew.bat assembleDebug     # debug build
+.\gradlew.bat assembleRelease   # signed release — requires your own keystore
+```
 
 ## Privacy
 

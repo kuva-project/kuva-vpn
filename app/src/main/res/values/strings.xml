@@ -25,6 +25,7 @@
     <!-- Connection states -->
     <string name="state_disconnected">Disconnected</string>
     <string name="state_connecting">Connecting…</string>
+    <string name="state_swift_scanning">Searching for route…</string>
     <string name="state_connected">Connected</string>
     <string name="state_disconnecting">Disconnecting…</string>
     <string name="state_error">Connection error</string>
@@ -177,6 +178,16 @@
     <string name="retry_interval">Retry interval (s)</string>
     <string name="auto_ping">Automatic ping after import</string>
     <string name="auto_select_mode">Server selection</string>
+    <string name="engine_mode">Connection engine</string>
+    <string name="engine_xray">Xray Core</string>
+    <string name="engine_xray_desc">Full Xray-core engine — uses the profiles from Free / My configs.</string>
+    <string name="engine_swift">Kuva Swift</string>
+    <string name="swift_card_desc">Serverless connection — the core finds the best route on its own.</string>
+    <string name="swift_row_engine">Engine</string>
+    <string name="swift_row_route">Route</string>
+    <string name="swift_row_auto">Automatic</string>
+    <string name="engine_swift_desc">Serverless MASQUE engine — connects without any profile, finds its own route.</string>
+    <string name="about_swift_attribution">Kuva Swift — powered by the open-source Aether core (AGPL-3.0).</string>
     <string name="mode_manual">Manual</string>
     <string name="mode_lowest_ping">Lowest ping</string>
     <string name="mode_best_perf">Best performance</string>
@@ -204,6 +215,8 @@
     <string name="update_download">Download &amp; install</string>
     <string name="update_downloading">Downloading… %s</string>
     <string name="update_install_prompt">The system install dialog will appear — confirm to update. Your data is kept.</string>
+    <string name="update_banner_title">New version available</string>
+    <string name="update_banner_body">To update, go to Settings → About.</string>
     <string name="update_need_permission">Install permission needed — tap to allow</string>
     <string name="battery_optimization">Battery optimization active</string>
     <string name="battery_optimization_desc">Android may kill the VPN in background — tap to allow unrestricted battery use</string>

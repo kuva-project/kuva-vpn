@@ -12,6 +12,7 @@ import android.os.ParcelFileDescriptor
 import com.kuva.vpn.core.config.XrayConfigBuilder
 import com.kuva.vpn.core.engine.CoreLogStore
 import com.kuva.vpn.core.engine.XrayCoreManager
+import com.kuva.vpn.core.engine.SwiftCoreManager
 import com.kuva.vpn.core.stats.TrafficStatsCollector
 import com.kuva.vpn.core.tunnel.Tun2Socks
 import com.kuva.vpn.data.settings.RoutingMode
@@ -48,6 +49,7 @@ class KuvaVpnService : VpnService() {
     @Inject lateinit var notifier: VpnNotifier
     @Inject lateinit var statsCollector: TrafficStatsCollector
     @Inject lateinit var configTester: com.kuva.vpn.core.diagnostics.ConfigTester
+    @Inject lateinit var swift: SwiftCoreManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var tunInterface: ParcelFileDescriptor? = null
@@ -165,7 +167,20 @@ class KuvaVpnService : VpnService() {
     }
 
     private suspend fun resolveProfile(): Profile? {
-        profileRepo.getSelected()?.let { return it }
+        val selected = profileRepo.getSelected()
+        if (selected != null) return selected
+        // Kuva Swift needs no profile at all: with no selection (and no
+        // auto-select hit) it still connects using a synthetic placeholder
+        // profile that only carries the display name for the UI.
+        if (settings.current.engineMode == "swift" && swift.isAvailable(applicationContext)) {
+            return Profile(
+                scope = Profile.Scope.FREE,
+                name = "Kuva Swift",
+                protocol = Profile.Protocol.SOCKS,
+                address = "127.0.0.1",
+                port = settings.current.socksPort,
+            )
+        }
         return when (settings.current.autoSelectMode) {
             "lowest_ping" -> profileRepo.bestByPing()
             "best_performance" -> profileRepo.bestByPerformance()
@@ -177,6 +192,12 @@ class KuvaVpnService : VpnService() {
         lastProfile = profile
         userDisconnected = false
         val s = settings.current
+        // Kuva Swift: the bundled MASQUE core replaces Xray entirely; the
+        // TUN -> SOCKS pipeline below is identical for both engines.
+        if (s.engineMode == "swift") {
+            connectSwift(profile)
+            return
+        }
         notifier.notifyConnecting(profile.name)
         connectionRepo.setState(ConnectionState.Connecting(profile.name, profile.id))
 
@@ -294,6 +315,103 @@ class KuvaVpnService : VpnService() {
         connectedNow = true
     }
 
+    /**
+     * Kuva Swift data path: TUN -> hev -> local SOCKS5 served by the bundled
+     * MASQUE core process (no Xray). The core runs under the app's uid, which
+     * the VPN builder already excludes from the TUN, so its outbound sockets
+     * go straight to the internet without looping.
+     */
+    private suspend fun connectSwift(profile: Profile) {
+        val s = settings.current
+        notifier.notifyConnecting(profile.name)
+        // no generic "Connecting…" hop: the scan state (with progress) is
+        // shown from the very first moment of a Swift connection
+        connectionRepo.setState(ConnectionState.SwiftConnecting(profile.name, 0))
+
+        if (!swift.isAvailable(applicationContext)) {
+            connectionRepo.setState(ConnectionState.Error("swift core unavailable on this ABI"))
+            notifier.notifyError("swift core unavailable")
+            stopSelf()
+            return
+        }
+
+        val tun = buildTunInterface(profile)
+        if (tun == null) {
+            connectionRepo.setState(ConnectionState.Error("establish() failed"))
+            notifier.notifyError("VPN interface failed")
+            stopSelf()
+            return
+        }
+        tunInterface = tun
+
+        Tun2Socks.start(
+            context = applicationContext,
+            vpnInterface = tun,
+            mtu = s.mtu,
+            ipv4 = VPN_IPV4,
+            ipv6 = if (s.ipv6Enabled) VPN_IPV6 else null,
+            socksPort = s.socksPort,
+        )
+        delay(400)
+        if (!Tun2Socks.isRunning()) {
+            connectionRepo.setState(ConnectionState.Error("tunnel engine failed"))
+            notifier.notifyError("tunnel engine failed")
+            swift.stop()
+            closeTun()
+            stopSelf()
+            return
+        }
+
+        if (!swift.start(applicationContext, s.socksPort)) {
+            connectionRepo.setState(ConnectionState.Error("swift core failed to start"))
+            notifier.notifyError("swift core failed to start")
+            Tun2Socks.stop()
+            closeTun()
+            stopSelf()
+            return
+        }
+
+        // scan-phase feedback: swap the generic "connecting" for the scan
+        // state with live progress so the user sees movement, not a hang
+        connectionRepo.setState(ConnectionState.SwiftConnecting(profile.name, 0))
+        swift.onProgress = { pct ->
+            connectionRepo.setState(ConnectionState.SwiftConnecting(profile.name, pct))
+        }
+
+        // first start includes endpoint discovery; give it a generous window
+        if (!swift.awaitSocksReady(s.socksPort, 60_000)) {
+            swift.onProgress = null
+            connectionRepo.setState(ConnectionState.Error("swift core did not come up"))
+            notifier.notifyError("swift core did not come up")
+            swift.stop()
+            Tun2Socks.stop()
+            closeTun()
+            stopSelf()
+            return
+        }
+        swift.onProgress = null
+        swift.onExited = {
+            serviceScope.launch {
+                if (connectedNow && !userDisconnected) {
+                    android.util.Log.w(TAG, "swift core died — scheduling reconnect")
+                    connectedNow = false
+                    Tun2Socks.stop()
+                    closeTun()
+                    scheduleReconnect()
+                }
+            }
+        }
+
+        statsCollector.start()
+        connectionRepo.setActiveProfile(profile)
+        connectionRepo.updateStats {
+            it.copy(connectedSinceEpochMs = System.currentTimeMillis())
+        }
+        connectionRepo.setState(ConnectionState.Connected(profile.name, profile.id))
+        notifier.notifyConnected(profile.name)
+        connectedNow = true
+    }
+
     /** Seamless config change while connected: tear down, reconnect, stay up. */
     private fun switchTo(profile: Profile) {
         if (switching) return
@@ -306,6 +424,7 @@ class KuvaVpnService : VpnService() {
                 runCatching { coreController?.stopLoop() }
                 coreController = null
                 Tun2Socks.stop()
+                swift.stop()
                 closeTun()
                 connectedNow = false
                 connectionRepo.updateStats {
@@ -426,6 +545,7 @@ class KuvaVpnService : VpnService() {
             statsCollector.stop()
             try { coreController?.stopLoop() } catch (_: Exception) { }
             coreController = null
+            swift.stop()
             Tun2Socks.stop()
             closeTun()
         }
@@ -464,6 +584,7 @@ class KuvaVpnService : VpnService() {
             statsCollector.stop(resetLiveStats = false)
             try { coreController?.stopLoop() } catch (_: Exception) { }
             coreController = null
+            swift.stop()
             Tun2Socks.stop()
             // verified ordering: stop service before closing the fd avoids a stale VPN icon
             closeTun()

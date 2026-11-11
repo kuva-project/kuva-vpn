@@ -2,6 +2,27 @@
 
 All notable changes to KUVAVpn are documented here.
 
+## v1.1.0 — 2026-11-11
+
+### Added
+- **Kuva Swift — configless engine**: a bundled MASQUE core (official Aether
+  v2.4.0 binaries, AGPL-3.0) connects with no profile at all — endpoint scan,
+  identity persistence, auto-reconnect. HTTP/2 (TCP) transport with TLS
+  ClientHello fragmentation for Iran's SNI filtering; IPv4-only.
+- Engine selector on the dashboard (under the status text) and in
+  Settings → Connection; Xray remains the default.
+- Auto update check on every app start: gold banner on the dashboard
+  ("New version available — see Settings → About") for 8 seconds and a red
+  dot on the Settings tab until the app is updated.
+- Collapsible settings cards: all 7 cards start collapsed showing only the
+  title; tapping expands/collapses with an animated chevron. Lighter card
+  title color.
+- Real app exit: the EXIT button now ends the process, so the next launch
+  boots on Xray as designed (engine choice still persists across
+  background/foreground).
+- LICENSE (AGPL-3.0) at repo root + bundled Aether LICENSES files; About
+  attribution line.
+
 ## v1.0.3 — 2026-11-10
 
 ### Fixed

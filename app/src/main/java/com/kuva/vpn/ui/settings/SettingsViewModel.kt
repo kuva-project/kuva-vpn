@@ -66,6 +66,7 @@ class SettingsViewModel @Inject constructor(
     fun setSelectedApps(apps: Set<String>) = viewModelScope.launch { repo.setSelectedApps(apps) }
     fun setConnTimeout(sec: Int) = viewModelScope.launch { repo.setConnTimeout(sec) }
     fun setRetryInterval(sec: Int) = viewModelScope.launch { repo.setRetryInterval(sec) }
+    fun setEngineMode(mode: String) = viewModelScope.launch { repo.setEngineMode(mode) }
     fun setMtu(v: Int) = viewModelScope.launch { repo.setMtu(v) }
     fun setSocksPort(v: Int) = viewModelScope.launch { repo.setSocksPort(v) }
     fun setSpeedLimit(mb: Int) = viewModelScope.launch { repo.setSpeedTestLimit(mb) }

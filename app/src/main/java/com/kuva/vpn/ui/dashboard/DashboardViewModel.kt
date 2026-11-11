@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlinx.coroutines.flow.map
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
@@ -43,6 +44,11 @@ class DashboardViewModel @Inject constructor(
 
     val selectedProfile: StateFlow<Profile?> = profileRepo.observeSelected()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** dashboard engine switch: "xray" (configs) vs "swift" (configless) */
+    val engineMode: StateFlow<String> = settings.settings
+        .map { it.engineMode }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "xray")
 
     init {
         // refresh Exit IP / Location automatically on every successful connect.
@@ -73,6 +79,8 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun clearExitIp() = connRepo.clearExitIp()
+
+    fun setEngineMode(mode: String) = viewModelScope.launch { settings.setEngineMode(mode) }
 
     fun toggle() {
         vpnControl.toggle(app())

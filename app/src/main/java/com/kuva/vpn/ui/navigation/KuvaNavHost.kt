@@ -11,6 +11,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,6 +59,11 @@ fun KuvaNavHost(sharedLink: String? = null) {
             androidx.core.os.LocaleListCompat.forLanguageTags(target)
         )
     }
+    // app-start update check result (computed once in KuvaApplication):
+    // drives the red dot on the settings tab until the app is updated
+    val updateAvailable by (androidx.compose.ui.platform.LocalContext.current.applicationContext
+        as com.kuva.vpn.KuvaApplication).updateAvailable.collectAsState()
+
     val tabs = listOf(
         Tab(Routes.HOME, R.string.nav_home, R.drawable.ic_nav_home),
         Tab(Routes.FREE, R.string.nav_free, R.drawable.ic_nav_free),
@@ -93,16 +101,29 @@ fun KuvaNavHost(sharedLink: String? = null) {
                             // itself — the old effect was the icon's own saturation
                             // filter), just a bigger icon + fully sharp colors.
                             // Inactive: smaller + slightly dimmed.
-                            Image(
-                                painter = painterResource(tab.iconRes),
-                                contentDescription = null,
-                                modifier = Modifier.size(if (selected) 72.dp else 52.dp),
-                                alpha = if (selected) 1f else 0.75f,
-                                colorFilter = if (selected) null else
-                                    androidx.compose.ui.graphics.ColorFilter.colorMatrix(
-                                        androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0.85f) },
-                                    ),
-                            )
+                            Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
+                                Image(
+                                    painter = painterResource(tab.iconRes),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(if (selected) 72.dp else 52.dp),
+                                    alpha = if (selected) 1f else 0.75f,
+                                    colorFilter = if (selected) null else
+                                        androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                                            androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0.85f) },
+                                        ),
+                                )
+                                // red update dot on the settings tab until updated
+                                if (tab.route == Routes.SETTINGS && updateAvailable) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(androidx.compose.ui.Alignment.TopEnd)
+                                            .padding(top = 2.dp, end = 2.dp)
+                                            .size(13.dp)
+                                            .clip(androidx.compose.foundation.shape.CircleShape)
+                                            .background(androidx.compose.ui.graphics.Color(0xFFFF3B30)),
+                                    )
+                                }
+                            }
                         },
                         label = {
                             // short fa label centered under the icon

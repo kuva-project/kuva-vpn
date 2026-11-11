@@ -16,7 +16,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0.3"
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         ndk {
@@ -71,7 +71,7 @@ android {
                         .outputFile.name  // e.g. "app-arm64-v8a-release.apk", "app-universal-release.apk"
                     val abi = out.substringBefore("-release.apk").substringAfter("app-", "")
                     (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl)
-                        .outputFileName = "KUVAVpn-v1.0.3-" + abi + ".apk"
+                        .outputFileName = "KUVAVpn-v1.1.0-" + abi + ".apk"
                 }
             }
         }
@@ -95,12 +95,20 @@ android {
     }
 
     packaging {
+        // The bundled configless core is an ELF EXECUTABLE (not a loadable
+        // library): with the default modern packaging it stays compressed
+        // inside the APK and never lands in nativeLibraryDir, so it cannot be
+        // exec'd. Legacy packaging extracts it uncompressed + executable.
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources.excludes += setOf("META-INF/*.kotlin_module", "META-INF/AL2.0", "META-INF/LGPL2.1")
     }
 
     sourceSets {
         getByName("main") {
             jniLibs.srcDir("../core-engine/libs")
+            jniLibs.srcDir("../core-engine/swift")
             assets.srcDir("../core-engine/assets")
         }
 
@@ -137,7 +145,7 @@ androidComponents {
                 "x86_64" -> 5
                 else -> 1
             }
-            output.versionCode.set(code * 1000 + 4)
+            output.versionCode.set(code * 1000 + 5)
         }
     }
 }

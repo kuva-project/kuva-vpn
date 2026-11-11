@@ -1,6 +1,10 @@
 package com.kuva.vpn.ui.settings
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +24,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -32,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -76,6 +83,34 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     ) {
         Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineMedium)
+
+        // ---------- connection engine (top of all settings) ----------
+        SectionCard(stringResource(R.string.engine_mode)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("xray", "swift").forEach { m ->
+                    FilterChip(
+                        selected = s.engineMode == m,
+                        onClick = { viewModel.setEngineMode(m) },
+                        label = {
+                            Text(
+                                when (m) {
+                                    "swift" -> stringResource(R.string.engine_swift)
+                                    else -> stringResource(R.string.engine_xray)
+                                }
+                            )
+                        },
+                    )
+                }
+            }
+            Text(
+                text = stringResource(
+                    if (s.engineMode == "swift") R.string.engine_swift_desc else R.string.engine_xray_desc
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
 
         // ---------- split tunneling ----------
         SectionCard(stringResource(R.string.split_tunneling)) {
@@ -315,6 +350,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 "Xray-core MPL-2.0 • hev-socks5-tunnel MPL-2.0",
                 viewModel::openLicenses,
             )
+            Text(
+                stringResource(R.string.about_swift_attribution),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
             ValueRow(stringResource(R.string.version), com.kuva.vpn.BuildConfig.VERSION_NAME, onClick = {})
             ValueRow(stringResource(R.string.clear_cache), "", viewModel::clearCache)
             ValueRow(stringResource(R.string.share_core_log), "", {
@@ -505,6 +546,14 @@ private fun NumberEditDialog(
 /** Grouped settings card with a small muted title at the top. */
 @Composable
 private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+    // collapsed by default: only the title is visible; tapping the title row
+    // expands the card contents, tapping again collapses them
+    var expanded by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(200),
+    )
+    val titleColor = Color(0xFFD08FFF)   // lighter neon purple accent
     Spacer(Modifier.height(16.dp))
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -512,14 +561,32 @@ private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Un
         shape = RoundedCornerShape(20.dp),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFFB026FF),   // neon purple accent
-            )
-            Spacer(Modifier.height(6.dp))
-            content()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = titleColor,
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = titleColor,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .rotate(chevronRotation),
+                )
+            }
+            if (expanded) {
+                Spacer(Modifier.height(6.dp))
+                content()
+            }
         }
     }
 }

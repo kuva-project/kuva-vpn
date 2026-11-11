@@ -7,12 +7,15 @@ sealed class ConnectionState {
     // name-based matching lit the green ring on EVERY same-named row
     // (duplicate rows from a subscription refresh all glowed).
     data class Connecting(val profileName: String?, val profileId: Long? = null) : ConnectionState()
+
+    /** Swift engine: endpoint scan in progress (0..100) — different UI copy. */
+    data class SwiftConnecting(val profileName: String?, val progressPct: Int = 0) : ConnectionState()
     data class Connected(val profileName: String?, val profileId: Long? = null) : ConnectionState()
     data object Disconnecting : ConnectionState()
     data class Error(val message: String) : ConnectionState()
 
     val isTunnelUp: Boolean get() = this is Connected
-    val isBusy: Boolean get() = this is Connecting || this is Disconnecting
+    val isBusy: Boolean get() = this is Connecting || this is SwiftConnecting || this is Disconnecting
 }
 
 /** Live stats snapshot, all values measured — never simulated. */

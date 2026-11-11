@@ -51,6 +51,8 @@ data class AppSettings(
     val mtu: Int = 1420,
     val socksPort: Int = 10808,
     val speedTestLimitMB: Int = 10,
+    // "xray" (config-driven) or "swift" (bundled configless MASQUE core)
+    val engineMode: String = "xray",
 ) {
     fun effectiveDnsServers(): List<String> = when (dnsProvider) {
         "cloudflare" -> listOf("1.1.1.1", "1.0.0.1")
@@ -91,6 +93,7 @@ class SettingsRepository @Inject constructor(
         val mtu = intPreferencesKey("mtu")
         val socksPort = intPreferencesKey("socks_port")
         val speedLimit = intPreferencesKey("speed_test_limit_mb")
+        val engineMode = stringPreferencesKey("engine_mode")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -118,6 +121,7 @@ class SettingsRepository @Inject constructor(
             mtu = p[Keys.mtu] ?: 1420,
             socksPort = p[Keys.socksPort] ?: 10808,
             speedTestLimitMB = p[Keys.speedLimit] ?: 10,
+            engineMode = p[Keys.engineMode] ?: "xray",
         )
     }
 
@@ -146,6 +150,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setMtu(v: Int) = context.dataStore.edit { it[Keys.mtu] = v }
     suspend fun setSocksPort(v: Int) = context.dataStore.edit { it[Keys.socksPort] = v }
     suspend fun setSpeedTestLimit(mb: Int) = context.dataStore.edit { it[Keys.speedLimit] = mb }
+    suspend fun setEngineMode(mode: String) = context.dataStore.edit { it[Keys.engineMode] = mode }
 
     suspend fun resetAll() {
         context.dataStore.edit { it.clear() }
