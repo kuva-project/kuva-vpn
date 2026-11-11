@@ -24,3 +24,4 @@ keystore.properties
 # Logs & misc
 *.log
 captures/
+build_log.txt

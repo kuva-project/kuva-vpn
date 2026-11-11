@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.app.Notification
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -389,6 +390,35 @@ class KuvaVpnService : VpnService() {
             stopSelf()
             return
         }
+        // The SOCKS port opens within a second or two, but the MASQUE path
+        // needs a few more seconds before traffic actually flows. Hold the
+        // "searching for route" state for a fixed ~10 s window while the bar
+        // fills to 100%, then flip to Connected — no external probe target
+        // involved (a probe can itself be blocked, which is worse than none).
+        val holdStart = System.currentTimeMillis()
+        val holdMs = 10_000L
+        while (true) {
+            if (!swift.isRunning()) {
+                swift.onProgress = null
+                connectionRepo.setState(ConnectionState.Error("swift core did not come up"))
+                notifier.notifyError("swift core did not come up")
+                swift.stop()
+                Tun2Socks.stop()
+                closeTun()
+                stopSelf()
+                return
+            }
+            val elapsed = System.currentTimeMillis() - holdStart
+            if (elapsed >= holdMs) break
+            val pct = (10 + (elapsed * 90 / holdMs)).toInt()
+            connectionRepo.setState(ConnectionState.SwiftConnecting(profile.name, pct))
+            try {
+                Thread.sleep(400)
+            } catch (_: InterruptedException) {
+                return
+            }
+        }
+        connectionRepo.setState(ConnectionState.SwiftConnecting(profile.name, 100))
         swift.onProgress = null
         swift.onExited = {
             serviceScope.launch {
@@ -512,6 +542,19 @@ class KuvaVpnService : VpnService() {
         if (cm == null) return
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
+                // The VPN interface itself (tun0/tun1) shows up as the default
+                // network ~1s after connect. Reacting to it "reconnected" the
+                // VPN mid-connect: a second establish() raced the first and
+                // hev refused to start on the second fd -> Connected UI with
+                // zero traffic. Only physical networks may trigger reconnect.
+                val caps = runCatching {
+                    (getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)
+                        ?.getNetworkCapabilities(network)
+                }.getOrNull()
+                if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true) {
+                    android.util.Log.i(TAG, "ignoring VPN's own network: $network")
+                    return
+                }
                 android.util.Log.i(TAG, "network available: $network")
                 scheduleReconnect()
             }
@@ -553,6 +596,7 @@ class KuvaVpnService : VpnService() {
 
     private fun scheduleReconnect() {
         if (userDisconnected) return
+        if (isStarting || switching) return
         if (connectedNow || coreController != null) return
         if (lastProfile == null) return
         pendingReconnect?.cancel()

@@ -29,7 +29,7 @@ fun AppPickerScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var apps by remember { mutableStateOf<List<ApplicationInfo>>(emptyList()) }
     var query by remember { mutableStateOf("") }
-    var checked by remember { mutableStateOf(selected.toMutableSet()) }
+    var checked by remember { mutableStateOf(selected) }
     val pm = context.packageManager
 
     LaunchedEffect(Unit) {
@@ -49,9 +49,9 @@ fun AppPickerScreen(
         text = {
             Column {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AssistChip(onClick = { checked = apps.map { it.packageName }.toMutableSet() },
+                    AssistChip(onClick = { checked = apps.map { it.packageName }.toSet() },
                         label = { Text(stringResource(R.string.select_all)) })
-                    AssistChip(onClick = { checked.clear() },
+                    AssistChip(onClick = { checked = emptySet() },
                         label = { Text(stringResource(R.string.clear_selection)) })
                 }
                 OutlinedTextField(
@@ -91,7 +91,9 @@ fun AppPickerScreen(
                             Checkbox(
                                 checked = pkg in checked,
                                 onCheckedChange = { on ->
-                                    if (on) checked.add(pkg) else checked.remove(pkg)
+                                    // reassign (never mutate): Compose only
+                                    // recomposes on a state VALUE change
+                                    checked = if (on) checked + pkg else checked - pkg
                                 },
                             )
                         }

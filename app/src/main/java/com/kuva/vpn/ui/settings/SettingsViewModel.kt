@@ -113,6 +113,22 @@ class SettingsViewModel @Inject constructor(
             context, context.packageName + ".fileprovider", f)
     }
 
+    /**
+     * Shareable URI of the Swift core log (null when nothing logged yet).
+     * FileProvider only exposes files/exports/, so the raw log from
+     * files/swift/swift.log is copied there first.
+     */
+    fun swiftLogSnapshot(): android.net.Uri? {
+        val src = java.io.File(context.filesDir, "swift/swift.log")
+        if (!src.exists() || src.length() == 0L) return null
+        val exports = java.io.File(context.filesDir, "exports").apply { mkdirs() }
+        val dst = java.io.File(exports, "swift_log_" + System.currentTimeMillis() + ".txt")
+        runCatching { src.copyTo(dst, overwrite = true) }
+        if (!dst.exists()) return null
+        return androidx.core.content.FileProvider.getUriForFile(
+            context, context.packageName + ".fileprovider", dst)
+    }
+
     // ---------------- in-app update (GitHub Releases) ----------------
 
     sealed class UpdateState {

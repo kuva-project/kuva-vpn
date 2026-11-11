@@ -342,12 +342,6 @@ fun DashboardScreen(
         if (state is ConnectionState.SwiftConnecting) {
             val pct = (state as ConnectionState.SwiftConnecting).progressPct
             Spacer(Modifier.height(6.dp))
-            Text(
-                stringResource(R.string.state_swift_scanning),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(6.dp))
             LinearProgressIndicator(
                 progress = { pct / 100f },
                 modifier = Modifier

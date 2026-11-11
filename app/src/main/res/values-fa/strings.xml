@@ -201,6 +201,8 @@
     <string name="battery_optimization_desc">اندروید ممکن است VPN را در پس‌زمینه بکشد — برای اجازه‌دادن به مصرف آزاد باتری لمس کنید</string>
     <string name="share_core_log">ارسال لاگ هسته</string>
     <string name="no_core_log">هنوز لاگی نیست — اول وصل شوید</string>
+    <string name="share_swift_log">اشتراک‌گذاری لاگ Swift</string>
+    <string name="no_swift_log">هنوز لاگی از Swift نیست — اول در حالت Swift وصل شو</string>
     <string name="kill_switch_desc">اگر تونل قطع شود همه ترافیک مسدود می‌شود (اندروید ۱۰ به بالا)</string>
     <string name="ipv6">پشتیبانی IPv6</string>
     <string name="split_tunneling">تقسیم تونل</string>

@@ -2,6 +2,23 @@
 
 All notable changes to KUVAVpn are documented here.
 
+## v1.1.1 — 2026-11-12
+
+### Fixed
+- **Connected but no traffic (debug builds)**: the network watcher treated the
+  VPN interface coming up as a "new network" and re-established the tunnel
+  ~1.5 s into connecting; the second hev start was refused, leaving a dead
+  tunnel under a Connected UI. VPN's own network is now ignored by the
+  reconnect watcher, and reconnects are suppressed while a connect is in
+  flight.
+- **Split tunneling app picker UI desync**: selection state was mutated
+  in place, so Compose never recomposed — taps really selected apps but
+  checkboxes did not redraw. State is now reassigned on every change.
+- **Duplicate "Searching for route…" label** on the dashboard in Swift
+  scan mode; the gray copy above the progress bar was removed.
+- Quick-settings tile state (decides from the connection repository, no
+  longer desyncs with the dashboard).
+
 ## v1.1.0 — 2026-11-11
 
 ### Added

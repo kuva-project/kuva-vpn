@@ -296,4 +296,6 @@
     <string name="invalid_value_hint">Value must be between %1$d and %2$d</string>
     <string name="share_core_log">Share core log</string>
     <string name="no_core_log">No core log yet — connect first</string>
+    <string name="share_swift_log">Share Swift log</string>
+    <string name="no_swift_log">No Swift log yet — connect in Swift mode first</string>
 </resources>

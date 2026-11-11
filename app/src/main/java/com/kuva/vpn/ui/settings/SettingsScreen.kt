@@ -372,6 +372,20 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                         context, R.string.no_core_log, android.widget.Toast.LENGTH_SHORT).show()
                 }
             })
+            ValueRow(stringResource(R.string.share_swift_log), "", {
+                val uri = viewModel.swiftLogSnapshot()
+                if (uri != null) {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(intent, null))
+                } else {
+                    android.widget.Toast.makeText(
+                        context, R.string.no_swift_log, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            })
         }
 
         // ---------- danger zone ----------
