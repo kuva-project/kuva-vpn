@@ -44,9 +44,15 @@ class KuvaApplication : Application() {
             }
         }
         // Fresh start always boots on the Xray engine: the engine switch is a
-        // per-session choice, not a persisted preference.
+        // per-session choice, not a persisted preference. Psiphon is
+        // per-session too — both the toggle and the exit country reset
+        // (OFF + Auto) on every fresh app start.
         appScope.launch {
-            runCatching { settings.setEngineMode("xray") }
+            runCatching {
+                settings.setEngineMode("xray")
+                settings.setSwiftPsiphon(false)
+                settings.setSwiftPsiphonCountry("")
+            }
         }
         appScope.launch {
             val s = settings.settings.first()

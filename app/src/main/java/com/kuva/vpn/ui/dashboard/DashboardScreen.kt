@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.kuva.vpn.ui.dashboard
 
 import androidx.compose.animation.core.LinearEasing
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -101,9 +104,12 @@ fun DashboardScreen(
     val exitIp by viewModel.exitIp.collectAsStateWithLifecycle()
     val directExitIp by viewModel.directExitIp.collectAsStateWithLifecycle()
     val selected by viewModel.selectedProfile.collectAsStateWithLifecycle()
+    val swiftPsiphon by viewModel.swiftPsiphon.collectAsStateWithLifecycle()
+    val swiftPsiphonCountry by viewModel.swiftPsiphonCountry.collectAsStateWithLifecycle()
 
     // back on the dashboard opens the exit popup: Exit / Keep in background / Cancel
     var showExitDialog by remember { mutableStateOf(false) }
+    var showPsiphonCountrySheet by remember { mutableStateOf(false) }
 
     val exitContext = androidx.compose.ui.platform.LocalContext.current
 
@@ -120,6 +126,56 @@ fun DashboardScreen(
         }
     }
     androidx.activity.compose.BackHandler { showExitDialog = true }
+
+    if (showPsiphonCountrySheet) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { showPsiphonCountrySheet = false }) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    stringResource(R.string.swift_psiphon_country),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(8.dp))
+                // fixed-height scrollable country box: the bottom sheet is
+                // otherwise clipped to the screen and the 28-row list got
+                // cut off around "IE"; this box scrolls to the very top and
+                // the very bottom of the list
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                listOf("", "AT", "AU", "BE", "CA", "CH", "CZ", "DE", "DK", "ES", "FI", "FR", "GB", "ID", "IE", "IN", "IT", "JP", "KR", "LT", "NL", "NO", "PL", "RO", "RS", "SE", "SG", "US").forEach { cc ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.setSwiftPsiphonCountryWithRestart(cc)
+                                showPsiphonCountrySheet = false
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(if (cc.isBlank()) "\uD83C\uDF0D" else flagOf(cc),
+                            style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.width(12.dp))
+                        Text(psiphonCountryName(cc, isFa), style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.weight(1f))
+                        if (swiftPsiphonCountry == cc) {
+                            Text("\u2713", color = NeonSwitchBlue, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+        }
+    }
 
     if (showExitDialog) {
         // ---- 3D embossed exit dialog (user request) ----
@@ -341,6 +397,7 @@ fun DashboardScreen(
         // Xray's plain Connecting… stays exactly as it was.
         if (state is ConnectionState.SwiftConnecting) {
             val pct = (state as ConnectionState.SwiftConnecting).progressPct
+            val stageKey = viewModel.swiftStage.collectAsState().value
             Spacer(Modifier.height(6.dp))
             LinearProgressIndicator(
                 progress = { pct / 100f },
@@ -350,6 +407,16 @@ fun DashboardScreen(
                 color = StatusOrange,
                 trackColor = StatusOrange.copy(alpha = 0.15f),
             )
+            // Real per-stage label under the bar — driven by the core's own
+            // log events, so it always matches what the bar shows.
+            if (stageKey != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = swiftStageLabel(stageKey),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         // ---------- engine switch: labels + sliding toggle ----------
@@ -405,6 +472,18 @@ fun DashboardScreen(
 
         Spacer(Modifier.height(20.dp))
 
+        // ---------- psiphon quick card: swift mode only, one line tall ----------
+        if (engineMode == "swift") {
+            PsiphonCard(
+                on = swiftPsiphon,
+                country = swiftPsiphonCountry,
+                isFa = isFa,
+                onToggle = { viewModel.setSwiftPsiphonWithRestart(!swiftPsiphon) },
+                onPickCountry = { showPsiphonCountrySheet = true },
+            )
+            Spacer(Modifier.height(10.dp))
+        }
+
         // ---------- exit tile FIRST: tunnel exit when connected, direct IP otherwise ----------
         val connectedNow = state is ConnectionState.Connected
         val exitInfo = if (connectedNow) exitIp else directExitIp
@@ -421,7 +500,7 @@ fun DashboardScreen(
         // ---------- active config card ----------
         // Swift mode has no config to show — a dedicated card replaces it
         if (engineMode == "swift") {
-            SwiftCard()
+            SwiftCard(psiphonOn = swiftPsiphon, isFa = isFa)
         } else {
             ConfigCard(
                 name = selected?.name,
@@ -573,21 +652,28 @@ private fun StatCard(
         ),
         shape = RoundedCornerShape(16.dp),
     ) {
-        Column(Modifier.padding(14.dp)) {
+        // centered text: stat tiles only (duration / ping / download / upload)
+        Column(
+            Modifier.fillMaxWidth().padding(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Text(label, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center)
             Spacer(Modifier.height(6.dp))
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center)
             if (sub != null) {
                 Text(sub, style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center)
             }
         }
     }
 }
 
 @Composable
-private fun SwiftCard() {
+private fun SwiftCard(psiphonOn: Boolean, isFa: Boolean) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -604,8 +690,18 @@ private fun SwiftCard() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(10.dp))
-            InfoRow(stringResource(R.string.swift_row_engine), "MASQUE")
-            InfoRow(stringResource(R.string.swift_row_route), stringResource(R.string.swift_row_auto))
+            InfoRow(stringResource(R.string.swift_row_engine), if (isFa) "ماسک" else "MASQUE")
+            // route label reflects the psiphon state: plain WARP, or
+            // WARP arrow Psiphon when the psiphon layer is on
+            InfoRow(
+                stringResource(R.string.swift_row_route),
+                if (isFa) {
+                    // RTL: the arrow points left in Persian, right in English
+                    if (psiphonOn) "وارپ ← سایفون" else "وارپ"
+                } else {
+                    if (psiphonOn) "WARP → Psiphon" else "WARP"
+                },
+            )
         }
     }
 }
@@ -766,6 +862,114 @@ private fun ExitTile(
 
 
 /** Full country name → ISO-3166 alpha-2, for endpoints that return no code. */
+@Composable
+private fun PsiphonCard(
+    on: Boolean,
+    country: String,
+    isFa: Boolean,
+    onToggle: () -> Unit,
+    onPickCountry: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.10f)
+        ),
+        shape = RoundedCornerShape(20.dp),
+    ) {
+        // two equal halves: the location chip starts at the card's center
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.psiphon_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                // on/off sits right after the label with a 3-space gap,
+                // preceded by a small status dot in the same color
+                Spacer(Modifier.width(12.dp))
+                Box(
+                    Modifier
+                        .size(9.dp)
+                        .clip(CircleShape)
+                        .background(if (on) Color(0xFF4CAF50) else Color(0xFFE53935))
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    stringResource(if (on) R.string.psiphon_on else R.string.psiphon_off),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (on) Color(0xFF4CAF50) else Color(0xFFE53935),
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onToggle,
+                    ),
+                )
+            }
+            // second half begins exactly at the card center — a 3-space
+            // gap inside it pushes the location chip off the midline
+            Row(
+                Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    if (country.isBlank()) "\uD83C\uDF0D " + stringResource(R.string.psiphon_auto)
+                    else flagOf(country) + " " + psiphonCountryName(country, isFa),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clickable(onClick = onPickCountry),
+                )
+            }
+        }
+    }
+}
+
+private fun flagOf(cc: String): String = try {
+    cc.uppercase().map { String(Character.toChars(0x1F1E6 + (it - 'A'))) }.joinToString("")
+} catch (_: Exception) { "" }
+
+private fun psiphonCountryName(cc: String, fa: Boolean = false): String = when (cc) {
+    "" -> if (fa) "خودکار" else "Auto"
+    "AT" -> if (fa) "اتریش" else "Austria"
+    "AU" -> if (fa) "استرالیا" else "Australia"
+    "BE" -> if (fa) "بلژیک" else "Belgium"
+    "CA" -> if (fa) "کانادا" else "Canada"
+    "CH" -> if (fa) "سوئیس" else "Switzerland"
+    "CZ" -> if (fa) "چک" else "Czechia"
+    "DE" -> if (fa) "آلمان" else "Germany"
+    "DK" -> if (fa) "دانمارک" else "Denmark"
+    "ES" -> if (fa) "اسپانیا" else "Spain"
+    "FI" -> if (fa) "فنلاند" else "Finland"
+    "FR" -> if (fa) "فرانسه" else "France"
+    "GB" -> if (fa) "بریتانیا" else "United Kingdom"
+    "ID" -> if (fa) "اندونزی" else "Indonesia"
+    "IE" -> if (fa) "ایرلند" else "Ireland"
+    "IN" -> if (fa) "هند" else "India"
+    "IT" -> if (fa) "ایتالیا" else "Italy"
+    "JP" -> if (fa) "ژاپن" else "Japan"
+    "KR" -> if (fa) "کره‌ی جنوبی" else "South Korea"
+    "LT" -> if (fa) "لیتوانی" else "Lithuania"
+    "NL" -> if (fa) "هلند" else "Netherlands"
+    "NO" -> if (fa) "نروژ" else "Norway"
+    "PL" -> if (fa) "لهستان" else "Poland"
+    "RO" -> if (fa) "رومانی" else "Romania"
+    "RS" -> if (fa) "صربستان" else "Serbia"
+    "SE" -> if (fa) "سوئد" else "Sweden"
+    "SG" -> if (fa) "سنگاپور" else "Singapore"
+    "US" -> if (fa) "ایالات متحده" else "United States"
+    else -> cc
+}
+
 private fun isoFromCountryName(name: String?): String? {
     val byName = mapOf(
         "iran" to "IR", "germany" to "DE", "united states" to "US", "united kingdom" to "GB",
@@ -775,6 +979,9 @@ private fun isoFromCountryName(name: String?): String? {
         "canada" to "CA", "japan" to "JP", "singapore" to "SG", "hong kong" to "HK",
         "armenia" to "AM", "georgia" to "GE", "azerbaijan" to "AZ", "uae" to "AE",
         "united arab emirates" to "AE", "spain" to "ES", "italy" to "IT", "belgium" to "BE",
+        "denmark" to "DK", "ireland" to "IE", "india" to "IN", "norway" to "NO",
+        "serbia" to "RS", "lithuania" to "LT", "australia" to "AU", "indonesia" to "ID",
+        "south korea" to "KR", "korea" to "KR", "czechia" to "CZ", "czech republic" to "CZ",
     )
     val key = name?.trim()?.lowercase() ?: return null
     if (key.length == 2 && key.all { it in 'a'..'z' }) return key.uppercase()
@@ -792,4 +999,23 @@ private fun InfoRow(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(90.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
     }
+}
+
+/**
+ * Maps a Swift progress stage key (from the core's own log events) to a
+ * localized label. Keys come from SwiftCoreManager.ProgressStages; unknown
+ * keys fall back to the generic scanning string.
+ */
+@Composable
+private fun swiftStageLabel(key: String): String = when (key) {
+    "prepare" -> stringResource(R.string.stage_prepare)
+    "identity" -> stringResource(R.string.stage_identity)
+    "check_cached" -> stringResource(R.string.stage_check_cached)
+    "saved_confirmed" -> stringResource(R.string.stage_saved_confirmed)
+    "finding_server" -> stringResource(R.string.stage_finding_server)
+    "selecting" -> stringResource(R.string.stage_selecting)
+    "tunnel" -> stringResource(R.string.stage_tunnel)
+    "testing" -> stringResource(R.string.stage_testing)
+    "final" -> stringResource(R.string.stage_final)
+    else -> stringResource(R.string.state_swift_scanning)
 }

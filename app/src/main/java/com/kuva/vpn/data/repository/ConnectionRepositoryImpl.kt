@@ -93,12 +93,19 @@ class ConnectionRepositoryImpl @Inject constructor(
     private val _exitIp = MutableStateFlow<ExitIpInfo?>(null)
     override val exitIp: StateFlow<ExitIpInfo?> = _exitIp.asStateFlow()
 
+    private val _swiftStage = MutableStateFlow<String?>(null)
+    override val swiftStage: StateFlow<String?> = _swiftStage.asStateFlow()
+
     @Volatile private var activeProfile: Profile? = null
 
     override fun setState(s: ConnectionState) {
         // disconnect (user or auto-reconnect teardown) blanks verified exit info
         if (s is ConnectionState.Disconnected || s is ConnectionState.Disconnecting) {
             _exitIp.value = null
+        }
+        // stage label only makes sense while connecting
+        if (s !is ConnectionState.Connecting && s !is ConnectionState.SwiftConnecting) {
+            _swiftStage.value = null
         }
         // fully disconnected: clear ping + speeds + traffic tiles too
         if (s is ConnectionState.Disconnected && _stats.value != LiveStats()) {
@@ -109,6 +116,10 @@ class ConnectionRepositoryImpl @Inject constructor(
 
     override fun setActiveProfile(p: Profile) {
         activeProfile = p
+    }
+
+    override fun setSwiftStage(key: String?) {
+        _swiftStage.value = key
     }
 
     override fun updateStats(transform: (LiveStats) -> LiveStats) {

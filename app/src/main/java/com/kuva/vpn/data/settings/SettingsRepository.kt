@@ -53,6 +53,11 @@ data class AppSettings(
     val speedTestLimitMB: Int = 10,
     // "xray" (config-driven) or "swift" (bundled configless MASQUE core)
     val engineMode: String = "xray",
+    val swiftH3: Boolean = false,      // HTTP/3 (QUIC) transport for Swift
+    val swiftScan: Boolean = true,     // route scan before Swift connect
+    val swiftPsiphon: Boolean = false, // route Swift through the Psiphon network
+    // preferred psiphon exit country: "" = Auto, otherwise ISO-2 like "US"/"DE"
+    val swiftPsiphonCountry: String = "",
 ) {
     fun effectiveDnsServers(): List<String> = when (dnsProvider) {
         "cloudflare" -> listOf("1.1.1.1", "1.0.0.1")
@@ -94,6 +99,10 @@ class SettingsRepository @Inject constructor(
         val socksPort = intPreferencesKey("socks_port")
         val speedLimit = intPreferencesKey("speed_test_limit_mb")
         val engineMode = stringPreferencesKey("engine_mode")
+        val swiftH3 = booleanPreferencesKey("swift_h3")
+        val swiftScan = booleanPreferencesKey("swift_scan")
+        val swiftPsiphon = booleanPreferencesKey("swift_psiphon")
+        val swiftPsiphonCountry = stringPreferencesKey("swift_psiphon_country")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -122,6 +131,10 @@ class SettingsRepository @Inject constructor(
             socksPort = p[Keys.socksPort] ?: 10808,
             speedTestLimitMB = p[Keys.speedLimit] ?: 10,
             engineMode = p[Keys.engineMode] ?: "xray",
+            swiftH3 = p[Keys.swiftH3] ?: false,
+            swiftScan = p[Keys.swiftScan] ?: true,
+            swiftPsiphon = p[Keys.swiftPsiphon] ?: false,
+            swiftPsiphonCountry = p[Keys.swiftPsiphonCountry] ?: "",
         )
     }
 
@@ -146,6 +159,21 @@ class SettingsRepository @Inject constructor(
     suspend fun setAutoSelect(mode: String) = context.dataStore.edit { it[Keys.autoSelect] = mode }
     suspend fun setKillSwitch(b: Boolean) = context.dataStore.edit { it[Keys.killSwitch] = b }
     suspend fun setIpv6(b: Boolean) = context.dataStore.edit { it[Keys.ipv6] = b }
+    suspend fun setSwiftH3(b: Boolean) = context.dataStore.edit { it[Keys.swiftH3] = b }
+    suspend fun setSwiftPsiphon(b: Boolean) = context.dataStore.edit { it[Keys.swiftPsiphon] = b }
+
+    /**
+     * Preferred psiphon exit country. The core (aether) only accepts values
+     * of exactly two ASCII letters (it uppercases and validates them), so we
+     * store "" for Auto and uppercase ISO-2 codes otherwise — anything else
+     * falls back to Auto.
+     */
+    suspend fun setSwiftPsiphonCountry(cc: String) {
+        val v = cc.trim().uppercase()
+        val safe = if (v.length == 2 && v.all { it in 'A'..'Z' }) v else ""
+        context.dataStore.edit { it[Keys.swiftPsiphonCountry] = safe }
+    }
+    suspend fun setSwiftScan(b: Boolean) = context.dataStore.edit { it[Keys.swiftScan] = b }
     suspend fun setStatsEnabled(b: Boolean) = context.dataStore.edit { it[Keys.stats] = b }
     suspend fun setMtu(v: Int) = context.dataStore.edit { it[Keys.mtu] = v }
     suspend fun setSocksPort(v: Int) = context.dataStore.edit { it[Keys.socksPort] = v }

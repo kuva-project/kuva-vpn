@@ -3,17 +3,25 @@ package com.kuva.vpn.ui.settings
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,7 +29,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -33,6 +45,9 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,9 +56,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kuva.vpn.R
@@ -63,6 +82,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var showPrivacy by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var showGeoInfo by remember { mutableStateOf(false) }
+    var showSwiftLog by remember { mutableStateOf(false) }
+    var swiftLog by remember { mutableStateOf<String?>(null) }
+    var showXrayLog by remember { mutableStateOf(false) }
+    var xrayLog by remember { mutableStateOf<String?>(null) }
     val geoState by viewModel.geoState.collectAsStateWithLifecycle()
     val geoMessage by viewModel.geoMessage.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
@@ -196,25 +219,22 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 onClick = { editing = NumField.RETRY },
             )
             SwitchRow(stringResource(R.string.auto_ping), null, s.autoPingAfterImport, viewModel::setAutoPing)
-            Spacer(Modifier.height(6.dp))
-            CardTitle(stringResource(R.string.auto_select_mode))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("manual", "lowest_ping", "best_performance").forEach { m ->
-                    FilterChip(
-                        selected = s.autoSelectMode == m,
-                        onClick = { viewModel.setAutoSelect(m) },
-                        label = {
-                            Text(
-                                when (m) {
-                                    "lowest_ping" -> stringResource(R.string.mode_lowest_ping)
-                                    "best_performance" -> stringResource(R.string.mode_best_perf)
-                                    else -> stringResource(R.string.mode_manual)
-                                }
-                            )
-                        },
-                    )
-                }
-            }
+            SwitchRow(
+                stringResource(R.string.swift_h3),
+                stringResource(R.string.swift_h3_desc),
+                s.swiftH3,
+                viewModel::setSwiftH3,
+            )
+            SwitchRow(
+                stringResource(R.string.swift_scan),
+                stringResource(R.string.swift_scan_desc),
+                s.swiftScan,
+                viewModel::setSwiftScan,
+            )
+            // psiphon on/off + exit country moved to the dashboard's quick
+            // card (bottom sheet) — settings no longer duplicates them
+            // server selection (manual/lowest ping/best performance) removed
+            // by user request — manual profile choice is always used
         }
 
         // ---------- security ----------
@@ -267,7 +287,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         }
 
         // ---------- about ----------
-        SectionCard(stringResource(R.string.about)) {
+        SectionCard(stringResource(R.string.about), initiallyExpanded = true) {
             // ---------- in-app update ----------
             when (val u = updateState) {
                 is SettingsViewModel.UpdateState.Idle -> Unit
@@ -345,10 +365,13 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 )
             }
             ValueRow(stringResource(R.string.privacy), "") { showPrivacy = true }
-            ValueRow(
-                stringResource(R.string.licenses),
-                "Xray-core MPL-2.0 • hev-socks5-tunnel MPL-2.0",
-                viewModel::openLicenses,
+            // license line, same linear format as the Kuva Swift
+            // attribution below (no clickable row needed)
+            Text(
+                "Xray-core — open-source under MPL-2.0.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             Text(
                 stringResource(R.string.about_swift_attribution),
@@ -358,33 +381,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             )
             ValueRow(stringResource(R.string.version), com.kuva.vpn.BuildConfig.VERSION_NAME, onClick = {})
             ValueRow(stringResource(R.string.clear_cache), "", viewModel::clearCache)
-            ValueRow(stringResource(R.string.share_core_log), "", {
-                val uri = viewModel.coreLogSnapshot()
-                if (uri != null) {
-                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(android.content.Intent.createChooser(intent, null))
-                } else {
-                    android.widget.Toast.makeText(
-                        context, R.string.no_core_log, android.widget.Toast.LENGTH_SHORT).show()
-                }
+            ValueRow(stringResource(R.string.view_xray_log), "", {
+                showXrayLog = true
             })
-            ValueRow(stringResource(R.string.share_swift_log), "", {
-                val uri = viewModel.swiftLogSnapshot()
-                if (uri != null) {
-                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(android.content.Intent.createChooser(intent, null))
-                } else {
-                    android.widget.Toast.makeText(
-                        context, R.string.no_swift_log, android.widget.Toast.LENGTH_SHORT).show()
-                }
+            ValueRow(stringResource(R.string.view_swift_log), "", {
+                showSwiftLog = true
             })
         }
 
@@ -449,6 +450,26 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         )
     }
 
+    if (showXrayLog) {
+        LogViewerDialog(
+            title = stringResource(R.string.view_xray_log),
+            emptyText = stringResource(R.string.xray_log_empty),
+            log = xrayLog,
+            onLoad = { xrayLog = viewModel.xrayLogText() },
+            onShare = { shareLogOrToast(context, viewModel.coreLogSnapshot(), R.string.no_core_log) },
+            onDismiss = { showXrayLog = false; xrayLog = null },
+        )
+    }
+    if (showSwiftLog) {
+        LogViewerDialog(
+            title = stringResource(R.string.view_swift_log),
+            emptyText = stringResource(R.string.swift_log_empty),
+            log = swiftLog,
+            onLoad = { swiftLog = viewModel.swiftLogText() },
+            onShare = { shareLogOrToast(context, viewModel.swiftLogSnapshot(), R.string.no_swift_log) },
+            onDismiss = { showSwiftLog = false; swiftLog = null },
+        )
+    }
     if (showPrivacy) {
         PrivacyPolicyDialog(onClose = { showPrivacy = false })
     }
@@ -557,12 +578,152 @@ private fun NumberEditDialog(
     )
 }
 
+/**
+ * Icon-only log-dialog button: outlined pill in the light neon purple
+ * accent (variant 3 from the mockup). Icon paints the whole label, so
+ * text can never clip or wrap.
+ */
+@Composable
+private fun LogActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(width = 56.dp, height = 44.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(24.dp),
+            tint = Color(0xFFE0B0FF),  // light neon purple accent
+        )
+    }
+}
+
+/**
+ * Shared log viewer dialog (Xray and Swift): monospace tail of the log with
+ * Share / Refresh / Close. `onLoad` runs on first show and on Refresh.
+ */
+@Composable
+private fun LogViewerDialog(
+    title: String,
+    emptyText: String,
+    log: String?,
+    onLoad: suspend () -> Unit,
+    onShare: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // first open (log == null) triggers the load; Refresh relaunches it
+    LaunchedEffect(log) { if (log == null) onLoad() }
+    val clipboard = LocalClipboardManager.current
+    val scroll = rememberScrollState()
+    // auto-scroll to the END of the log: the latest lines are what matter
+    LaunchedEffect(log, scroll.maxValue) {
+        scroll.scrollTo(scroll.maxValue)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, modifier = Modifier.weight(1f))
+                // X close icon at the top of the dialog
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.close),
+                    )
+                }
+            }
+        },
+        text = {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(340.dp),
+            ) {
+                when {
+                    log == null -> Text(
+                        emptyText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    else -> androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(
+                            log,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = FontFamily.Monospace, fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.verticalScroll(scroll),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            // buttons wrap their own text, centered in one row —
+            // each label is always fully visible on a single line
+            Row(
+                horizontalArrangement =
+                    Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                // Share: box with up arrow (user-chosen IosShare icon)
+                LogActionButton(
+                    Icons.Filled.IosShare,
+                    stringResource(R.string.swift_log_share),
+                    onClick = onShare,
+                )
+                LogActionButton(
+                    Icons.Filled.Refresh,
+                    stringResource(R.string.swift_log_refresh),
+                    onClick = { scope.launch { onLoad() } },
+                )
+                // Copy replaces the old Close button: one tap copies the
+                // whole log text; the X icon above closes the dialog
+                LogActionButton(
+                    Icons.Filled.ContentCopy,
+                    stringResource(R.string.log_copy),
+                    onClick = { clipboard.setText(AnnotatedString(log ?: "")) },
+                )
+            }
+        },
+    )
+}
+
+/** Shares a log file URI, or toasts when there is nothing to share yet. */
+private fun shareLogOrToast(
+    context: android.content.Context,
+    uri: android.net.Uri?,
+    noLogRes: Int,
+) {
+    if (uri != null) {
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, null))
+    } else {
+        android.widget.Toast.makeText(
+            context, noLogRes, android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
 /** Grouped settings card with a small muted title at the top. */
 @Composable
-private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun SectionCard(
+    title: String,
+    initiallyExpanded: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     // collapsed by default: only the title is visible; tapping the title row
     // expands the card contents, tapping again collapses them
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = tween(200),

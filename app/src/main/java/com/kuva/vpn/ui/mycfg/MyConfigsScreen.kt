@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -342,7 +343,8 @@ private fun SubscriptionSection(
                 Spacer(Modifier.width(6.dp))
                 Column(Modifier.weight(1f)) {
                     Text(sub.name, fontWeight = FontWeight.Bold, maxLines = 1,
-                        style = MaterialTheme.typography.bodyMedium)
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 16.sp)  // header size (user request)
                     Text(stringResource(R.string.sub_count, owned.size),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -509,7 +511,8 @@ private fun ManualSection(
             Spacer(Modifier.width(6.dp))
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.section_manual_configs), fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium)
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 16.sp)  // same size as the subscription headers
                 Text(stringResource(R.string.sub_count, profiles.size),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -38,6 +38,9 @@ class DashboardViewModel @Inject constructor(
     val stats: StateFlow<LiveStats> = connRepo.stats
     val exitIp: StateFlow<ExitIpInfo?> = connRepo.exitIp
 
+    /** Swift connect stage key for the label under the progress bar. */
+    val swiftStage: StateFlow<String?> = connRepo.swiftStage
+
     /** user's DIRECT (no-tunnel) public IP / location, shown when disconnected */
     private val _directExitIp = MutableStateFlow<ExitIpInfo?>(null)
     val directExitIp: StateFlow<ExitIpInfo?> = _directExitIp.asStateFlow()
@@ -49,6 +52,14 @@ class DashboardViewModel @Inject constructor(
     val engineMode: StateFlow<String> = settings.settings
         .map { it.engineMode }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "xray")
+
+    val swiftPsiphon: StateFlow<Boolean> = settings.settings
+        .map { it.swiftPsiphon }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val swiftPsiphonCountry: StateFlow<String> = settings.settings
+        .map { it.swiftPsiphonCountry }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     init {
         // refresh Exit IP / Location automatically on every successful connect.
@@ -63,10 +74,31 @@ class DashboardViewModel @Inject constructor(
                 val connected = st is ConnectionState.Connected
                 if (connected && !wasConnected) {
                     launch {
-                        kotlinx.coroutines.delay(2500)   // let the tunnel settle
-                        if (connRepo.state.value is ConnectionState.Connected) {
+                        // Swift's first minutes: the WARP handshake settles slowly,
+                        // so retry a few times before showing "unavailable"
+                        kotlinx.coroutines.delay(2500)
+                        // Psiphon (reverse mode): the whole tunnel is dialled
+                        // THROUGH psiphon, so the socks inbound only answers once
+                        // the tunnel — carried by psiphon — is up, and every
+                        // probe already sees the real psiphon-country exit. The
+                        // core's chain-mode "psiphon through the tunnel exit"
+                        // log line never fires in this mode, so there is no
+                        // isp == "Psiphon" marker to wait for either: the plain
+                        // retry loop is enough for every engine mode.
+                        // small psiphon regions (FI, BE, ...) can take a
+                        // minute or more before the psiphon-carried tunnel
+                        // is up, so psiphon mode gets a longer retry window
+                        // (8 x 8 s ~ 64 s, matching the 90 s service gate);
+                        // other modes keep the original 3 attempts
+                        val maxAttempts = if (settings.current.swiftPsiphon) 8 else 3
+                        for (attempt in 0 until maxAttempts) {
+                            if (connRepo.state.value !is ConnectionState.Connected) break
                             val port = settings.current.socksPort
-                            connRepo.setExitIp(exitIpChecker.lookup(port))
+                            val info = exitIpChecker.lookup(port)
+                            if (info != null) connRepo.setExitIp(info)
+                            // first successful probe is final
+                            if (info != null) break
+                            kotlinx.coroutines.delay(8000)
                         }
                     }
                 } else if (!connected && wasConnected) {
@@ -81,6 +113,35 @@ class DashboardViewModel @Inject constructor(
     fun clearExitIp() = connRepo.clearExitIp()
 
     fun setEngineMode(mode: String) = viewModelScope.launch { settings.setEngineMode(mode) }
+
+    /** Toggle psiphon from the dashboard card; a live connection restarts so
+     *  the change applies immediately instead of "on next connect". */
+    fun setSwiftPsiphonWithRestart(on: Boolean) {
+        viewModelScope.launch {
+            settings.setSwiftPsiphon(on)
+            restartSwiftIfActive()
+        }
+    }
+
+    /** Change the psiphon exit country from the bottom sheet; restarts a live
+     *  swift connection so the new country takes effect now. */
+    fun setSwiftPsiphonCountryWithRestart(cc: String) {
+        viewModelScope.launch {
+            settings.setSwiftPsiphonCountry(cc)
+            restartSwiftIfActive()
+        }
+    }
+
+    private suspend fun restartSwiftIfActive() {
+        when (connRepo.state.value) {
+            is ConnectionState.Connected, is ConnectionState.SwiftConnecting -> {
+                vpnControl.requestStop(app())
+                kotlinx.coroutines.delay(1200)   // let the service tear down
+                vpnControl.requestStart(app())
+            }
+            else -> Unit
+        }
+    }
 
     fun toggle() {
         vpnControl.toggle(app())

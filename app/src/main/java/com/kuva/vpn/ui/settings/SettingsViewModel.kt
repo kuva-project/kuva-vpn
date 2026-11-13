@@ -67,6 +67,12 @@ class SettingsViewModel @Inject constructor(
     fun setConnTimeout(sec: Int) = viewModelScope.launch { repo.setConnTimeout(sec) }
     fun setRetryInterval(sec: Int) = viewModelScope.launch { repo.setRetryInterval(sec) }
     fun setEngineMode(mode: String) = viewModelScope.launch { repo.setEngineMode(mode) }
+    fun setSwiftH3(b: Boolean) = viewModelScope.launch { repo.setSwiftH3(b) }
+    fun setSwiftPsiphon(b: Boolean) = viewModelScope.launch { repo.setSwiftPsiphon(b) }
+
+    fun setSwiftPsiphonCountry(cc: String) =
+        viewModelScope.launch { repo.setSwiftPsiphonCountry(cc) }
+    fun setSwiftScan(b: Boolean) = viewModelScope.launch { repo.setSwiftScan(b) }
     fun setMtu(v: Int) = viewModelScope.launch { repo.setMtu(v) }
     fun setSocksPort(v: Int) = viewModelScope.launch { repo.setSocksPort(v) }
     fun setSpeedLimit(mb: Int) = viewModelScope.launch { repo.setSpeedTestLimit(mb) }
@@ -128,6 +134,36 @@ class SettingsViewModel @Inject constructor(
         return androidx.core.content.FileProvider.getUriForFile(
             context, context.packageName + ".fileprovider", dst)
     }
+
+    /**
+     * Tail of the Swift core log for the in-app viewer (null when empty).
+     * swift.log is capped at ~512KB so reading it whole is cheap.
+     */
+    suspend fun swiftLogText(maxLines: Int = 300): String? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val f = java.io.File(context.filesDir, "swift/swift.log")
+            if (!f.exists() || f.length() == 0L) return@withContext null
+            runCatching {
+                val lines = f.readLines()
+                if (lines.size <= maxLines) lines.joinToString("\n")
+                else lines.takeLast(maxLines).joinToString("\n")
+            }.getOrNull()
+        }
+
+    /**
+     * Tail of the Xray core log for the in-app viewer (null when empty).
+     * Uses the combined snapshot (xray_error + xray_access) that sharing uses.
+     */
+    suspend fun xrayLogText(maxLines: Int = 300): String? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val f = com.kuva.vpn.core.engine.CoreLogStore.snapshotFile(context)
+                ?: return@withContext null
+            runCatching {
+                val lines = f.readLines()
+                if (lines.size <= maxLines) lines.joinToString("\n")
+                else lines.takeLast(maxLines).joinToString("\n")
+            }.getOrNull()
+        }
 
     // ---------------- in-app update (GitHub Releases) ----------------
 

@@ -14,10 +14,14 @@ interface ConnectionRepository {
     val state: StateFlow<ConnectionState>
     val stats: StateFlow<LiveStats>
     val exitIp: StateFlow<ExitIpInfo?>
+    val swiftStage: StateFlow<String?>
 
     fun setState(s: ConnectionState)
     fun setActiveProfile(p: Profile)
     fun updateStats(transform: (LiveStats) -> LiveStats)
     fun setExitIp(info: ExitIpInfo?)
     fun clearExitIp()
+
+    /** Swift connect stage key (see SwiftCoreManager.ProgressStages); null = none. */
+    fun setSwiftStage(key: String?)
 }
