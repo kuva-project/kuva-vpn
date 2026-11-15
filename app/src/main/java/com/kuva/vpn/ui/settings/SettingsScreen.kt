@@ -1,7 +1,10 @@
 package com.kuva.vpn.ui.settings
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Box
@@ -36,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -45,6 +49,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -53,8 +58,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
@@ -68,6 +75,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kuva.vpn.R
 import com.kuva.vpn.data.settings.RoutingMode
 import com.kuva.vpn.ui.apps.AppPickerScreen
+import java.io.File
 
 /**
  * Settings, redesigned as grouped cards (appearance, split tunneling, DNS,
@@ -82,14 +90,28 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var showPrivacy by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var showGeoInfo by remember { mutableStateOf(false) }
+    var geoSourcePick by remember { mutableStateOf("") }
     var showSwiftLog by remember { mutableStateOf(false) }
     var swiftLog by remember { mutableStateOf<String?>(null) }
     var showXrayLog by remember { mutableStateOf(false) }
+    var showLogPicker by remember { mutableStateOf(false) }
     var xrayLog by remember { mutableStateOf<String?>(null) }
     val geoState by viewModel.geoState.collectAsStateWithLifecycle()
     val geoMessage by viewModel.geoMessage.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val batteryRestricted = viewModel.batteryRestricted.value
+
+    // the user tapped the update banner on the dashboard: it landed here with
+    // the auto-check flag set — run the update check immediately, clear flag
+    val appUpdateFlag = androidx.compose.ui.platform.LocalContext.current
+        .applicationContext as com.kuva.vpn.KuvaApplication
+    val runUpdateCheck by appUpdateFlag.runUpdateCheck.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(runUpdateCheck) {
+        if (runUpdateCheck) {
+            appUpdateFlag.runUpdateCheck.value = false
+            viewModel.checkForUpdates()
+        }
+    }
 
     // refresh the battery-optimization flag every time settings opens/resumes
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -114,6 +136,15 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     FilterChip(
                         selected = s.engineMode == m,
                         onClick = { viewModel.setEngineMode(m) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color.Transparent,
+                            labelColor = Color.White.copy(alpha = 0.75f),
+                            selectedContainerColor = Color.Transparent,
+                            selectedLabelColor = Color(0xFFB026FF),
+                        ),
+                        border = if (s.engineMode == m)
+                            BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))))
+                        else BorderStroke(1.5.dp, Color.White.copy(alpha = 0.15f)),
                         label = {
                             Text(
                                 when (m) {
@@ -177,6 +208,15 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     FilterChip(
                         selected = s.dnsProvider == p,
                         onClick = { viewModel.setDnsProvider(p) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color.Transparent,
+                            labelColor = Color.White.copy(alpha = 0.75f),
+                            selectedContainerColor = Color.Transparent,
+                            selectedLabelColor = Color(0xFFB026FF),
+                        ),
+                        border = if (s.dnsProvider == p)
+                            BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))))
+                        else BorderStroke(1.5.dp, Color.White.copy(alpha = 0.15f)),
                         label = { Text(p.replaceFirstChar { it.uppercase() }) },
                     )
                 }
@@ -219,11 +259,14 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 onClick = { editing = NumField.RETRY },
             )
             SwitchRow(stringResource(R.string.auto_ping), null, s.autoPingAfterImport, viewModel::setAutoPing)
+            // HTTP/3 is a Swift-engine transport — disabled (and dimmed)
+            // while the Xray engine is selected
             SwitchRow(
                 stringResource(R.string.swift_h3),
                 stringResource(R.string.swift_h3_desc),
                 s.swiftH3,
                 viewModel::setSwiftH3,
+                enabled = s.engineMode == "swift",
             )
             SwitchRow(
                 stringResource(R.string.swift_scan),
@@ -260,6 +303,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             )
             SwitchRow(stringResource(R.string.ipv6), null, s.ipv6Enabled, viewModel::setIpv6)
             SwitchRow(stringResource(R.string.stats_enabled), null, s.statsEnabled, viewModel::setStats)
+            SwitchRow(stringResource(R.string.notif_show_speed), null, s.showNotifSpeed, viewModel::setShowNotifSpeed)
         }
 
         // ---------- advanced ----------
@@ -351,10 +395,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             }
             ValueRow(
                 stringResource(R.string.geo_assets),
-                geoState.source.ifBlank {
-                    geoState.geosite.ifBlank { "bundled" }
+                stringResource(R.string.geo_check_short),
+                onClick = {
+                    geoSourcePick = s.geoSource
+                    showGeoInfo = true
                 },
-                onClick = { showGeoInfo = true },
             )
             geoMessage?.let { msg ->
                 Text(
@@ -380,19 +425,49 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             ValueRow(stringResource(R.string.version), com.kuva.vpn.BuildConfig.VERSION_NAME, onClick = {})
-            ValueRow(stringResource(R.string.clear_cache), "", viewModel::clearCache)
-            ValueRow(stringResource(R.string.view_xray_log), "", {
-                showXrayLog = true
+            ValueRow(stringResource(R.string.telegram_channel), "@kuvaproject", {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse("https://t.me/kuvaproject")
+                        )
+                    )
+                }
             })
-            ValueRow(stringResource(R.string.view_swift_log), "", {
-                showSwiftLog = true
+            ValueRow(stringResource(R.string.github_repo), "github.com/kuva-project/kuva-vpn", {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse("https://github.com/kuva-project/kuva-vpn")
+                        )
+                    )
+                }
+            })
+            ValueRow(stringResource(R.string.view_logs), "", {
+                showLogPicker = true
+            })
+            ValueRow(stringResource(R.string.bug_report), "", {
+                val ok = buildAndShareBugReport(context)
+                if (!ok) {
+                    android.widget.Toast.makeText(
+                        context, context.getString(R.string.bug_report_failed),
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
             })
         }
 
         // ---------- danger zone ----------
         Spacer(Modifier.height(16.dp))
         TextButton(onClick = { showResetConfirm = true }) {
-            Text(stringResource(R.string.reset_settings), color = MaterialTheme.colorScheme.error)
+            Text(stringResource(R.string.reset_settings), color = Color(0xFFFF1744),
+                fontSize = 17.sp)
+        }
+        TextButton(onClick = viewModel::clearCache) {
+            Text(stringResource(R.string.clear_cache), color = Color(0xFFFF1744),
+                fontSize = 17.sp)
         }
         Spacer(Modifier.height(32.dp))
     }
@@ -429,6 +504,29 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                         )
                     }
                     Spacer(Modifier.height(12.dp))
+                    // selectable source repo (radio list, like v2rayNG's
+                    // asset sources): picked with "Update", remembered in
+                    // DataStore so later updates reuse it
+                    Text(
+                        stringResource(R.string.geo_source),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    com.kuva.vpn.core.engine.GeoUpdater.SOURCES.forEach { src ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { geoSourcePick = src }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = geoSourcePick == src,
+                                onClick = { geoSourcePick = src },
+                            )
+                            Text(src, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
                     Text(
                         stringResource(R.string.geo_assets_desc),
                         style = MaterialTheme.typography.bodySmall,
@@ -438,6 +536,9 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             confirmButton = {
                 TextButton(onClick = {
                     showGeoInfo = false
+                    if (geoSourcePick != s.geoSource) {
+                        viewModel.setGeoSource(geoSourcePick)
+                    }
                     viewModel.updateGeo()
                 }) { Text(stringResource(R.string.geo_update)) }
             },
@@ -450,6 +551,25 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         )
     }
 
+    if (showLogPicker) {
+        AlertDialog(
+            onDismissRequest = { showLogPicker = false },
+            title = { Text(stringResource(R.string.view_logs)) },
+            text = {
+                Column {
+                    TextButton(onClick = {
+                        showLogPicker = false
+                        showXrayLog = true
+                    }) { Text(stringResource(R.string.log_pick_xray)) }
+                    TextButton(onClick = {
+                        showLogPicker = false
+                        showSwiftLog = true
+                    }) { Text(stringResource(R.string.log_pick_swift)) }
+                }
+            },
+            confirmButton = {},
+        )
+    }
     if (showXrayLog) {
         LogViewerDialog(
             title = stringResource(R.string.view_xray_log),
@@ -724,8 +844,11 @@ private fun SectionCard(
     // collapsed by default: only the title is visible; tapping the title row
     // expands the card contents, tapping again collapses them
     var expanded by remember { mutableStateOf(initiallyExpanded) }
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val chevronRotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
+        // expanded: point down; collapsed: point toward the text start
+        // edge — right in English, left in Persian
+        targetValue = if (expanded) 0f else if (rtl) 90f else -90f,
         animationSpec = tween(200),
     )
     val titleColor = Color(0xFFD08FFF)   // lighter neon purple accent
@@ -741,14 +864,7 @@ private fun SectionCard(
                     .fillMaxWidth()
                     .clickable { expanded = !expanded },
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = titleColor,
-                )
                 Icon(
                     Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
@@ -756,6 +872,13 @@ private fun SectionCard(
                     modifier = Modifier
                         .size(22.dp)
                         .rotate(chevronRotation),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = titleColor,
                 )
             }
             if (expanded) {
@@ -783,6 +906,9 @@ private fun ModeOption(
             containerColor = if (selected) Color(0xFFB026FF).copy(alpha = 0.18f)
             else Color.White.copy(alpha = 0.06f),
         ),
+        border = if (selected)
+            BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))))
+        else null,
         shape = RoundedCornerShape(14.dp),
     ) {
         Row(
@@ -820,11 +946,13 @@ private fun SwitchRow(
     desc: String?,
     checked: Boolean,
     onChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .alpha(if (enabled) 1f else 0.45f),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -840,7 +968,8 @@ private fun SwitchRow(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onChange,
+            onCheckedChange = if (enabled) onChange else null,
+            enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedTrackColor = Color(0xFFB026FF),   // neon purple
                 checkedThumbColor = Color(0xFF101010),
@@ -875,4 +1004,65 @@ private fun ValueRow(title: String, value: String, onClick: () -> Unit) {
             )
         }
     }
+}
+
+
+/**
+ * Bug-report bundle: app/device info + the last core logs, zipped into
+ * cache/exports (already exposed through the FileProvider) and handed to
+ * the system share sheet (Telegram, email, ...). Nothing is uploaded by
+ * the app itself — the user picks the destination and sees what is sent.
+ * Logs are trimmed to their last 400 KB so the zip stays small.
+ */
+private fun buildAndShareBugReport(context: android.content.Context): Boolean {
+    return runCatching {
+        val outDir = File(context.cacheDir, "exports").apply { mkdirs() }
+        val out = File(outDir, "kuva_report.zip")
+        java.util.zip.ZipOutputStream(out.outputStream().buffered()).use { z ->
+            fun put(name: String, text: String, maxBytes: Int = 400_000) {
+                if (text.isEmpty()) return
+                val bytes = text.toByteArray(Charsets.UTF_8)
+                val trimmed = if (bytes.size > maxBytes)
+                    bytes.copyOfRange(bytes.size - maxBytes, bytes.size)
+                else bytes
+                z.putNextEntry(java.util.zip.ZipEntry(name))
+                z.write(trimmed)
+                z.closeEntry()
+            }
+            val info = buildString {
+                appendLine("KUVAVpn bug report")
+                appendLine(
+                    "time: " + java.text.SimpleDateFormat(
+                        "yyyy-MM-dd HH:mm:ss", java.util.Locale.US
+                    ).format(java.util.Date())
+                )
+                appendLine(
+                    "app: " + context.packageName +
+                        " v" + com.kuva.vpn.BuildConfig.VERSION_NAME +
+                        " (" + com.kuva.vpn.BuildConfig.VERSION_CODE + ")"
+                )
+                appendLine(
+                    "device: " + android.os.Build.MANUFACTURER + " " +
+                        android.os.Build.MODEL +
+                        " (Android " + android.os.Build.VERSION.RELEASE +
+                        ", SDK " + android.os.Build.VERSION.SDK_INT + ")"
+                )
+            }
+            put("info.txt", info)
+            File(context.filesDir, "swift/swift.log").takeIf { it.exists() }
+                ?.let { put("swift.log", it.readText()) }
+            File(context.cacheDir, "logs/xray.log").takeIf { it.exists() }
+                ?.let { put("xray.log", it.readText()) }
+        }
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context, context.packageName + ".fileprovider", out
+        )
+        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(send, null))
+        true
+    }.getOrDefault(false)
 }

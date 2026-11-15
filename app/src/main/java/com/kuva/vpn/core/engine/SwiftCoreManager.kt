@@ -148,6 +148,11 @@ class SwiftCoreManager @Inject constructor() {
     var tunnelRestored: Boolean = false
         private set
 
+    /** Service-side reset before waiting for the core's next latch. */
+    fun resetTunnelRestoredLatch() {
+        tunnelRestored = false
+    }
+
     /** Parsed lazily on the log thread; ip and country code of the Psiphon exit. */
     private fun parsePsiphonExit(line: String) {
         val m = PSIPHON_EXIT_RE.find(line) ?: return
@@ -332,6 +337,78 @@ class SwiftCoreManager @Inject constructor() {
         private set
 
     /** Polls the SOCKS5 port; true as soon as the core accepts TCP there. */
+    /**
+     * Active liveness probe through the local SOCKS port: minimal SOCKS5
+     * handshake, CONNECT to cp.cloudflare.com:80 (WARP's own health
+     * endpoint) and a tiny HEAD /generate_204 through the tunnel. Catches
+     * silent tunnel death that neither the process-exit callback nor the
+     * log-line watchdog can see. True only when a full HTTP 204 answer came
+     * back within the timeout; any hiccup (connect refusal, SOCKS error,
+     * read timeout) is a failure.
+     */
+    fun tunnelProbe(socksPort: Int, timeoutMs: Int): Boolean {
+        var sock: Socket? = null
+        return try {
+            sock = Socket()
+            sock.soTimeout = timeoutMs
+            sock.connect(InetSocketAddress("127.0.0.1", socksPort), timeoutMs)
+            val out = sock.getOutputStream()
+            val inp = sock.getInputStream()
+            // SOCKS5 greeting: no-auth
+            out.write(byteArrayOf(0x05, 0x01, 0x00)); out.flush()
+            val greet = ByteArray(2)
+            if (readFully(inp, greet) != 2 ||
+                greet[0] != 0x05.toByte() || greet[1] != 0x00.toByte()
+            ) return false
+            // CONNECT cp.cloudflare.com:80 by domain name (ATYP=3)
+            val host = PROBE_HOST.toByteArray(Charsets.US_ASCII)
+            val req = ByteArray(5 + host.size + 2)
+            req[0] = 0x05; req[1] = 0x01; req[2] = 0x00
+            req[3] = 0x03; req[4] = host.size.toByte()
+            host.copyInto(req, 5)
+            req[req.size - 2] = 0x00; req[req.size - 1] = 0x50  // port 80
+            out.write(req); out.flush()
+            // reply: VER REP RSV ATYP + variable-length BND.ADDR + BND.PORT
+            val head4 = ByteArray(4)
+            if (readFully(inp, head4) != 4 || head4[1] != 0x00.toByte()) return false
+            val addrLen = when (head4[3].toInt()) {
+                0x01 -> 4
+                0x03 -> {
+                    val l = ByteArray(1)
+                    if (readFully(inp, l) != 1) return false
+                    l[0].toInt() and 0xFF
+                }
+                0x04 -> 16
+                else -> return false
+            }
+            val tail = ByteArray(addrLen + 2)
+            if (readFully(inp, tail) != tail.size) return false
+            // the real probe: 204 means the tunnel actually carries data
+            val http = ("HEAD /generate_204 HTTP/1.1\r\n" +
+                "Host: $PROBE_HOST\r\n" +
+                "Connection: close\r\n\r\n").toByteArray(Charsets.US_ASCII)
+            out.write(http); out.flush()
+            val buf = ByteArray(32)
+            val n = inp.read(buf)
+            n > 0 && String(buf, 0, n, Charsets.US_ASCII).startsWith("HTTP/1.1 204")
+        } catch (t: Throwable) {
+            false
+        } finally {
+            runCatching { sock?.close() }
+        }
+    }
+
+    /** Exact SOCKS5 reply-read: blocks until buf is full or EOF. */
+    private fun readFully(inp: java.io.InputStream, buf: ByteArray): Int {
+        var off = 0
+        while (off < buf.size) {
+            val n = inp.read(buf, off, buf.size - off)
+            if (n < 0) break
+            off += n
+        }
+        return off
+    }
+
     fun awaitSocksReady(bindPort: Int, timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         scanProgressPct = 5
@@ -432,6 +509,8 @@ class SwiftCoreManager @Inject constructor() {
             "psiphon through the tunnel exit: ([0-9a-fA-F:.]+), ([A-Z]{2}) via ([A-Z]{3})"
         )
         private const val TAG = "KuvaSwift"
+        /** WARP's own connectivity-check endpoint, used by tunnelProbe. */
+        private const val PROBE_HOST = "cp.cloudflare.com"
         private const val LIB_NAME = "libaether.so"
         private const val PT_NAME = "libpt.so"
         private const val DIR_NAME = "swift"

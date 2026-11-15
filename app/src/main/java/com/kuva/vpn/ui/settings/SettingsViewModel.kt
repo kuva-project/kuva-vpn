@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.kuva.vpn.data.settings.AppSettings
 import com.kuva.vpn.data.settings.RoutingMode
 import com.kuva.vpn.data.settings.SettingsRepository
+import com.kuva.vpn.core.control.VpnControl
+import com.kuva.vpn.domain.model.ConnectionState
+import com.kuva.vpn.domain.repository.ConnectionRepository
 import android.content.Context
 import com.kuva.vpn.core.update.GitHubUpdater
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +24,8 @@ class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
     private val geoUpdater: com.kuva.vpn.core.engine.GeoUpdater,
     private val updater: GitHubUpdater,
+    private val vpnControl: VpnControl,
+    private val connRepo: ConnectionRepository,
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = repo.settings
@@ -66,13 +71,29 @@ class SettingsViewModel @Inject constructor(
     fun setSelectedApps(apps: Set<String>) = viewModelScope.launch { repo.setSelectedApps(apps) }
     fun setConnTimeout(sec: Int) = viewModelScope.launch { repo.setConnTimeout(sec) }
     fun setRetryInterval(sec: Int) = viewModelScope.launch { repo.setRetryInterval(sec) }
-    fun setEngineMode(mode: String) = viewModelScope.launch { repo.setEngineMode(mode) }
+    /** Switch engine; a live connection restarts on the NEW engine right
+     *  away instead of waiting for the next connect (matches the dashboard). */
+    fun setEngineMode(mode: String) = viewModelScope.launch {
+        repo.setEngineMode(mode)
+        when (connRepo.state.value) {
+            is ConnectionState.Connected,
+            is ConnectionState.Connecting,
+            is ConnectionState.SwiftConnecting -> {
+                vpnControl.requestStop(context)
+                kotlinx.coroutines.delay(1200)   // let the service tear down
+                vpnControl.requestStart(context)
+            }
+            else -> Unit
+        }
+    }
+    fun setSwiftScan(b: Boolean) = viewModelScope.launch { repo.setSwiftScan(b) }
+    fun setShowNotifSpeed(b: Boolean) = viewModelScope.launch { repo.setShowNotifSpeed(b) }
     fun setSwiftH3(b: Boolean) = viewModelScope.launch { repo.setSwiftH3(b) }
     fun setSwiftPsiphon(b: Boolean) = viewModelScope.launch { repo.setSwiftPsiphon(b) }
 
     fun setSwiftPsiphonCountry(cc: String) =
         viewModelScope.launch { repo.setSwiftPsiphonCountry(cc) }
-    fun setSwiftScan(b: Boolean) = viewModelScope.launch { repo.setSwiftScan(b) }
+    fun setGeoSource(src: String) = viewModelScope.launch { repo.setGeoSource(src) }
     fun setMtu(v: Int) = viewModelScope.launch { repo.setMtu(v) }
     fun setSocksPort(v: Int) = viewModelScope.launch { repo.setSocksPort(v) }
     fun setSpeedLimit(mb: Int) = viewModelScope.launch { repo.setSpeedTestLimit(mb) }
@@ -86,10 +107,10 @@ class SettingsViewModel @Inject constructor(
     private val _geoMessage = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     val geoMessage: kotlinx.coroutines.flow.StateFlow<String?> = _geoMessage
 
-    /** Pull the latest geo databases from the upstream repo (sha256 checked). */
+    /** Pull the latest geo databases from the selected upstream repo (sha256 checked). */
     fun updateGeo() = viewModelScope.launch {
         _geoMessage.value = "Checking…"
-        geoUpdater.update(context) { _geoMessage.value = it }
+        geoUpdater.update(context, { _geoMessage.value = it }, settings.value.geoSource)
             .onSuccess { tag ->
                 _geoMessage.value = "Updated to $tag — reconnect to apply"
                 refreshGeo()

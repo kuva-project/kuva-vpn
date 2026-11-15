@@ -27,8 +27,18 @@ import javax.inject.Singleton
 class GeoUpdater @Inject constructor() {
 
     companion object {
-        const val RELEASE_URL =
-            "https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest"
+        /** Selectable geo asset sources — full .dat builds with sha256sums. */
+        val SOURCES = listOf(
+            "Loyalsoldier/v2ray-rules-dat",
+            "Chocolate4U/Iran-v2ray-rules",
+            "runetfreedom/russia-v2ray-rules-dat",
+        )
+        const val DEFAULT_SOURCE = "Chocolate4U/Iran-v2ray-rules"
+
+        /** releaseUrl("Chocolate4U/Iran-v2ray-rules") -> GitHub API latest URL. */
+        fun releaseUrl(source: String): String =
+            "https://api.github.com/repos/$source/releases/latest"
+
         private const val TAG = "GeoUpdater"
         private val FILE_NAMES = listOf("geoip.dat", "geosite.dat")
 
@@ -128,8 +138,16 @@ class GeoUpdater @Inject constructor() {
         return out
     }
 
-    /** Download the latest release from the source repo; atomic + sha256 checked. */
-    suspend fun update(ctx: Context, onProgress: (String) -> Unit): Result<String> =
+    /**
+     * Download the latest release of [source] ("owner/repo", one of [SOURCES]);
+     * atomic + sha256 checked. The source is remembered in the marker file so
+     * Info() shows which repo the installed databases came from.
+     */
+    suspend fun update(
+        ctx: Context,
+        onProgress: (String) -> Unit,
+        source: String = DEFAULT_SOURCE,
+    ): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 onProgress("Checking…")
@@ -137,7 +155,7 @@ class GeoUpdater @Inject constructor() {
                     "User-Agent" to "KUVAVpn/1.0 (geo update)",
                     "Accept" to "application/vnd.github+json",
                 )
-                val meta = JSONObject(httpGet(RELEASE_URL, headers))
+                val meta = JSONObject(httpGet(releaseUrl(source), headers))
                 val tag = meta.getString("tag_name")
                 val assets = meta.getJSONArray("assets")
                 val urls = HashMap<String, String>()
@@ -182,7 +200,7 @@ class GeoUpdater @Inject constructor() {
                     }
                 }
                 dir.deleteRecursively()
-                markerFile(ctx).writeText("Loyalsoldier/v2ray-rules-dat $tag")
+                markerFile(ctx).writeText("$source $tag")
                 Log.i(TAG, "geo databases updated to $tag")
                 tag
             }

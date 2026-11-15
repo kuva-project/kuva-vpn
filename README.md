@@ -16,15 +16,14 @@ Premium Android VPN client with **two engines**: the classic **Xray-core**
 (VLESS / VMess / Trojan / Shadowsocks / SOCKS / HTTP; REALITY, TLS, WebSocket,
 gRPC, HTTP/2, HTTPUpgrade, XHTTP transports) and the serverless **Kuva Swift**
 (MASQUE via the bundled open-source Aether core, AGPL-3.0) that connects with
-no profile at all. (VLESS / VMess / Trojan /
-Shadowsocks / SOCKS / HTTP; REALITY, TLS, WebSocket, gRPC, HTTP/2, HTTPUpgrade,
-XHTTP transports). Kotlin + Jetpack Compose (Material 3), Clean Architecture + MVVM.
+no profile at all — including an optional per-country **Psiphon** layer
+(WARP → Psiphon). Kotlin + Jetpack Compose (Material 3), Clean Architecture + MVVM.
 
 ## Feature map
 
 | Area | What's implemented | Where |
 |---|---|---|
-| Kuva Swift engine | Serverless MASQUE (HTTP/2 + TLS ClientHello fragmentation) — connects with no profile; bundled Aether v2.4.0 core (AGPL-3.0); engine switch on dashboard & Settings; per-session reset to Xray | `core/swift/`, `ui/configless/` |
+| Kuva Swift engine | Serverless MASQUE (HTTP/2 + TLS ClientHello fragmentation) — connects with no profile; bundled Aether v2.4.0 core (AGPL-3.0); engine switch on dashboard & Settings; per-session reset to Xray; optional Psiphon reverse-mode routing with 28-country exit picker | `core/swift/`, `ui/configless/` |
 | Real VPN tunnel | `VpnService` TUN + hev-socks5-tunnel (TUN→SOCKS) + Xray core | `core/service/KuvaVpnService.kt`, `core/tunnel/Tun2Socks.kt` |
 | Config parsing | vless/vmess/trojan/ss/socks/http share links + raw Xray JSON, crash-safe | `core/config/parser/ShareLinkParser.kt` |
 | Config generation | Full Xray JSON (inbounds, DNS, routing, stats, REALITY/TLS) | `core/config/XrayConfigBuilder.kt` |
@@ -32,6 +31,7 @@ XHTTP transports). Kotlin + Jetpack Compose (Material 3), Clean Architecture + M
 | Real latency tests | TCP handshake + full proxy round-trip via `MeasureOutboundDelay` | `core/diagnostics/ConfigTester.kt` |
 | Real speed tests | Size-limited HTTP up/down through the actual tunnel, user-capped | same |
 | Live stats | Real byte counters from the native tunnel, 1 s polling, speeds + totals + duration | `core/stats/TrafficStatsCollector.kt` |
+| Swift tunnel watchdog | Detects `h2 keepalive timeout` / `connection aborted` drops from core logs, shows an honest reconnecting state, auto-recovers in place | `core/engine/SwiftCoreManager.kt`, `core/service/KuvaVpnService.kt` |
 | Exit IP verification | HTTPS geoip lookup **through the tunnel** after connect | `core/diagnostics/ExitIpChecker.kt` |
 | My Configs + subscriptions | Import (link/clipboard/QR/file/manual), subscription refresh with expiry metadata, hard isolation from free repo | `domain/usecase/SubscriptionUseCase.kt`, `ui/mycfg/` |
 | Split tunneling | Per-app bypass/only modes via VpnService Builder, picker UI | `KuvaVpnService.buildTunInterface`, `ui/apps/AppPickerScreen.kt` |
@@ -66,10 +66,10 @@ kuva-vpn/
 
 | File | For |
 |---|---|
-| `KUVAVpn-v1.1.0-arm64-v8a.apk` | All modern phones (recommended) |
-| `KUVAVpn-v1.1.0-armeabi-v7a.apk` | Older 32-bit phones |
-| `KUVAVpn-v1.1.0-x86.apk` / `KUVAVpn-v1.1.0-x86_64.apk` | Intel tablets / emulators |
-| `KUVAVpn-v1.1.0-universal.apk` | Works on any device (larger) |
+| `KUVAVpn-v1.2.1-arm64-v8a.apk` | All modern phones (recommended) |
+| `KUVAVpn-v1.2.1-armeabi-v7a.apk` | Older 32-bit phones |
+| `KUVAVpn-v1.2.1-x86_64.apk` | Intel tablets / x86_64 emulators |
+| `KUVAVpn-v1.2.1-universal.apk` | Works on any device (larger) |
 
 Minimum Android: **8.0 (API 26)**.
 

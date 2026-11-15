@@ -5,6 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.infiniteRepeatable
@@ -15,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Box
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -67,6 +72,8 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
     val testingSpeed by viewModel.testingSpeed.collectAsStateWithLifecycle()
     val singlePinging by viewModel.singlePinging.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    // color hint for the status banner: "undo" = dark delete banner, null = default look
+    var bannerKind by remember { mutableStateOf<String?>(null) }
     val speedDoneFmt = stringResource(R.string.speed_test_done)
     val speedZeroMsg = stringResource(R.string.speed_test_zero)
     LaunchedEffect(Unit) {
@@ -84,15 +91,18 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
     // undo snackbar: delete is held in memory; Undo restores it, otherwise dropped
     val undoFmt = stringResource(R.string.undo_deleted_config)
     val undoLabel = stringResource(R.string.undo)
-    val lifeOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
-    val isForeground = lifeOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
-    if (isForeground) LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) {
         viewModel.undoEvents.collect { ev ->
             when (ev) {
                 FreeConfigViewModel.UndoEvent.DeletedOne -> {
                     snackbarHostState.currentSnackbarData?.dismiss()
-                    val r = snackbarHostState.showSnackbar(
-                        undoFmt, actionLabel = undoLabel, duration = SnackbarDuration.Indefinite)
+                    bannerKind = "undo"
+                    // delete stays undoable for 4 s, then the stash is dropped
+                    val r = kotlinx.coroutines.withTimeoutOrNull(4000L) {
+                        snackbarHostState.showSnackbar(
+                            undoFmt, actionLabel = undoLabel, duration = SnackbarDuration.Indefinite)
+                    }
+                    bannerKind = null
                     if (r == SnackbarResult.ActionPerformed) viewModel.undoDelete() else viewModel.discardUndo()
                 }
             }
@@ -108,7 +118,7 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
         SourcesDialog(viewModel = viewModel, onDismiss = { showSources = false })
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }, containerColor = Color.Transparent) { innerPad ->
+    Scaffold(snackbarHost = { UndoBannerHost(snackbarHostState, bannerKind) }, containerColor = Color.Transparent) { innerPad ->
     Column(Modifier.fillMaxSize().padding(innerPad).padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(16.dp))
         Text(
@@ -123,7 +133,7 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
         Spacer(Modifier.height(8.dp))
 
         // ---- pane switch (neon orange labels + indicator) ----
-        val neon = Color(0xFFFF7A1A)
+        val neon = Color(0xFFFF6D00)
         TabRow(
             selectedTabIndex = tab,
             containerColor = Color.Transparent,
@@ -143,7 +153,8 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                 onClick = { viewModel.setTab(0) },
                 text = { Text(
                     "${stringResource(R.string.tab_search)} (${searchProfiles.size})",
-                    color = if (tab == 0) neon else neon.copy(alpha = 0.55f),
+                    color = if (tab == 0) neon else neon.copy(alpha = 0.65f),
+                    fontSize = 15.sp,
                 ) },
             )
             Tab(
@@ -151,7 +162,8 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                 onClick = { viewModel.setTab(1) },
                 text = { Text(
                     "${stringResource(R.string.tab_vault)} (${vaultProfiles.size})",
-                    color = if (tab == 1) neon else neon.copy(alpha = 0.55f),
+                    color = if (tab == 1) neon else neon.copy(alpha = 0.65f),
+                    fontSize = 15.sp,
                 ) },
             )
         }
@@ -225,145 +237,165 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
         val vaultPing = pinging && progress.runOwner == "vault"
         if (tab == 0) {
             // ================= SEARCH PANE =================
-            // ---- action area: two tidy rows, one job per button ----
-            // row 1: search | sources | clear list
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    // pressing Search opens the source picker popup;
-                    // its confirm button starts the actual search
-                    onClick = { showSources = true },
-                    enabled = !progress.running,
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFB026FF),   // neon purple
-                        contentColor = Color(0xFF101010),
-                    ),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                ) {
-                    if (searching) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.searching), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-                    } else {
-                        Text(stringResource(R.string.search_free), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-                    }
-                }
-                OutlinedButton(
-                    onClick = { viewModel.clearResults() },
-                    enabled = !progress.running,
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.medium,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                ) {
-                    Text(stringResource(R.string.clear_results), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            // row 2: ping (tap again = stop) | move alive to vault
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = { if (myPing) viewModel.cancelPing() else viewModel.testSearchPings() },
-                    // disabled while ANY other run (search / vault / mine) is alive
-                    enabled = !searching && (!progress.running || progress.runOwner == "search"),
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = if (myPing) ButtonDefaults.buttonColors(
-                        containerColor = com.kuva.vpn.ui.theme.StatusGreen,  // green while running
-                        contentColor = Color(0xFF101010),
-                    ) else ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    ),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                ) {
-                    if (myPing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp), strokeWidth = 2.dp,
-                            color = Color(0xFF101010),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.stop_ping), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-                    } else {
-                        Text(stringResource(R.string.test_ping), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-                    }
-                }
-                OutlinedButton(
-                    onClick = viewModel::transferToVault,
-                    enabled = !progress.running,
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.medium,
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                ) {
-                    Text(stringResource(R.string.transfer_alive), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+            // ---- action area (option C): one neon-outlined Search button only;
+            // ping + transfer live in a floating bar shown when the list has rows ----
+            Button(
+                // pressing Search opens the source picker popup;
+                // its confirm button starts the actual search
+                onClick = { showSources = true },
+                enabled = !progress.running,
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Transparent,   // ghost: neon border only
+                    contentColor = Color(0xFFB026FF),      // neon purple label
+                ),
+                border = BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF)))),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+            ) {
+                if (searching) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color(0xFFB026FF))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.searching), color = Color(0xFFB026FF), fontWeight = FontWeight.Bold, maxLines = 1)
+                } else {
+                    Text(stringResource(R.string.search_free), color = Color(0xFFB026FF), fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
 
             Spacer(Modifier.height(8.dp))
-            LazyColumn(
-                state = searchListState,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                if (searchProfiles.isEmpty()) {
-                    item {
-                        Text(
-                            stringResource(R.string.no_free),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 32.dp),
-                        )
+            Box(Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = searchListState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    if (searchProfiles.isEmpty()) {
+                        item {
+                            Text(
+                                stringResource(R.string.no_free),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 32.dp),
+                            )
+                        }
+                    }
+                    items(searchProfiles, key = { it.id }) { p ->
+                        // display-only row: no buttons, no swipe (user request)
+                        SearchRow(profile = p)
+                    }
+                    item { Spacer(Modifier.height(72.dp)) }   // room for the floating bar
+                }
+                // floating action bar: only when the list has rows (option C)
+                if (searchProfiles.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 8.dp)
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(Color(0xF0101010)),   // near-opaque dark: rows never bleed through
+                    ) {
+                        Button(
+                            onClick = { if (myPing) viewModel.cancelPing() else viewModel.testSearchPings() },
+                            // disabled while ANY other run (search / vault / mine) is alive
+                            enabled = !searching && (!progress.running || progress.runOwner == "search"),
+                            modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.medium,
+                            // ghost style: transparent fill, neon green border
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Transparent,
+                                contentColor = com.kuva.vpn.ui.theme.StatusGreen,
+                            ),
+                            border = BorderStroke(
+                                2.dp,
+                                if (myPing) Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, Color(0xFF00C853)))
+                                else Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, Color(0xFF00E676))),
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        ) {
+                            if (myPing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp), strokeWidth = 2.dp,
+                                    color = com.kuva.vpn.ui.theme.StatusGreen,
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.stop_ping), color = com.kuva.vpn.ui.theme.StatusGreen, fontWeight = FontWeight.Bold, maxLines = 1)
+                            } else {
+                                Text(stringResource(R.string.test_ping), color = com.kuva.vpn.ui.theme.StatusGreen, fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
+                        }
+                        // Move alive -> vault: ghost with warm gold neon border (money/action color,
+                        // distinct from purple search and green ping; gray felt too passive)
+                        Button(
+                            onClick = viewModel::transferToVault,
+                            enabled = !progress.running,
+                            modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.medium,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Transparent,
+                                contentColor = com.kuva.vpn.ui.theme.Gold,
+                            ),
+                            border = BorderStroke(2.dp, Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.Gold, com.kuva.vpn.ui.theme.GoldLight))),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        ) {
+                            Text(stringResource(R.string.transfer_alive), color = com.kuva.vpn.ui.theme.Gold, fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
                     }
                 }
-                items(searchProfiles, key = { it.id }) { p ->
-                    // display-only row: no buttons, no swipe (user request)
-                    SearchRow(profile = p)
-                }
-                item { Spacer(Modifier.height(16.dp)) }
             }
         } else {
             // ================= VAULT PANE =================
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                // ghost style: transparent fill, neon green border — same as search pane (green = test)
                 Button(
                     onClick = { if (vaultPing) viewModel.cancelPing() else viewModel.testVaultPings() },
                     // disabled while ANY other run (search / vault / mine) is alive
                     enabled = !searching && (!progress.running || progress.runOwner == "vault"),
                     modifier = Modifier.weight(1f),
                     shape = MaterialTheme.shapes.medium,
-                    colors = if (vaultPing) ButtonDefaults.buttonColors(
-                        containerColor = com.kuva.vpn.ui.theme.StatusGreen,  // green while running
-                        contentColor = Color(0xFF101010),
-                    ) else ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = com.kuva.vpn.ui.theme.StatusGreen,
+                    ),
+                    border = BorderStroke(
+                        2.dp,
+                        if (vaultPing) Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, Color(0xFF00C853)))
+                        else Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, Color(0xFF00E676))),
                     ),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 ) {
                     if (vaultPing) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp), strokeWidth = 2.dp,
-                            color = Color(0xFF101010),
+                            color = com.kuva.vpn.ui.theme.StatusGreen,
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.stop_ping), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text(stringResource(R.string.stop_ping), color = com.kuva.vpn.ui.theme.StatusGreen, fontWeight = FontWeight.Bold, maxLines = 1)
                     } else {
-                        Text(stringResource(R.string.ping), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text(stringResource(R.string.ping), color = com.kuva.vpn.ui.theme.StatusGreen, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                 }
-                OutlinedButton(
+                // ghost style: warm red neon border — red = destructive action / dead configs
+                Button(
                     onClick = viewModel::deleteDeadVault,
                     modifier = Modifier.weight(1f),
                     shape = MaterialTheme.shapes.medium,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color(0xFFFF1744),
+                    ),
+                    border = BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFFFF1744), Color(0xFFFF5252)))),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 ) {
-                    Text(stringResource(R.string.delete_dead), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(stringResource(R.string.delete_dead), color = Color(0xFFFF1744), fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
 
             Spacer(Modifier.height(8.dp))
             LazyColumn(
                 state = vaultListState,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 if (vaultProfiles.isEmpty()) {
@@ -582,6 +614,46 @@ private fun SourcesDialog(
     )
 }
 
+/** V2Box-style vertical protocol ribbon: a slim colored bar at the START
+ *  edge of a config card showing the protocol abbreviation rotated 90°.
+ *  Colors are protocol-coded (vless blue, vmess purple, trojan orange,
+ *  ss green) so a long list is scannable by color at a glance. */
+@Composable
+fun ProtocolRibbon(protocol: String) {
+    val (label, colors) = when (protocol.uppercase()) {
+        "VLESS" -> "VLESS" to listOf(Color(0xFF2979FF), Color(0xFF00E5FF))
+        "VMESS" -> "VMESS" to listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))
+        "TROJAN" -> "TROJAN" to listOf(Color(0xFFFF6D3B), Color(0xFFFFAB40))
+        "SHADOWSOCKS" -> "SS" to listOf(Color(0xFF2ECC71), Color(0xFF00E676))
+        "SOCKS" -> "SOCKS" to listOf(Color(0xFF90A4AE), Color(0xFFB0BEC5))
+        "HTTP" -> "HTTP" to listOf(Color(0xFFFFC107), Color(0xFFFFE082))
+        else -> protocol.take(6).uppercase() to listOf(Color(0xFF90A4AE), Color(0xFFB0BEC5))
+    }
+    // fixed 58dp inside the 60dp card row: 1dp breathing room top & bottom
+    Column(
+        modifier = Modifier
+            .width(22.dp)
+            .height(58.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Brush.verticalGradient(colors)),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // letters stacked top-to-bottom, edge-to-edge inside the ribbon
+        label.forEach { ch ->
+            Text(
+                ch.toString(),
+                fontSize = 9.sp,
+                lineHeight = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1,
+            )
+        }
+    }
+    Spacer(Modifier.width(8.dp))
+}
+
 @Composable
 fun ConfigRow(
     profile: Profile,
@@ -618,7 +690,8 @@ fun ConfigRow(
         border = borderBrush?.let { BorderStroke(2.dp, it) },
     ) {
         // compact row: smaller padding (user request #2)
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.height(60.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            ProtocolRibbon(profile.protocol.name)
             Column(Modifier.weight(1f)) {
                 Text(profile.name, fontWeight = FontWeight.SemiBold, maxLines = 1,
                     style = MaterialTheme.typography.bodyMedium)
@@ -742,6 +815,60 @@ fun SwipeToDeleteRow(
                 },
         ) {
             content()
+        }
+    }
+}
+
+// delete/undo banner at the bottom of the vault screen: dark neutral card,
+// red x mark, white text, purple Undo button — same style as My Configs
+@Composable
+private fun UndoBannerHost(
+    hostState: SnackbarHostState,
+    kind: String?,
+) {
+    SnackbarHost(hostState) { data ->
+        // full-area box so a wrap-content banner can sit centered at the bottom
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            if (kind != "undo") {
+                androidx.compose.material3.Snackbar(data)
+            } else {
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 12.dp)
+                        .widthIn(max = 315.dp)
+                        .background(
+                            Brush.horizontalGradient(listOf(Color(0xFF2A2A2A), Color(0xFF1E1E1E))),
+                            RoundedCornerShape(12.dp),
+                        )
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "\u2715",
+                        color = Color(0xFFFF5252),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        data.visuals.message,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    androidx.compose.material3.TextButton(
+                        onClick = { data.performAction() },
+                    ) {
+                        Text(
+                            data.visuals.actionLabel ?: "",
+                            color = Color(0xFFB026FF),
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
         }
     }
 }

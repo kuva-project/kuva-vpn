@@ -111,7 +111,7 @@
 
     <!-- My configs / subscriptions -->
     <string name="add_config">افزودن کانفیگ</string>
-    <string name="add_manual">افزودن دستی</string>
+    <string name="add_manual">افزودن کانفیگ</string>
     <string name="add_sub">افزودن ساب</string>
     <string name="sub_update">به‌روزرسانی</string>
     <string name="sub_refresh">تازه‌سازی</string>
@@ -119,8 +119,9 @@
     <string name="sub_last_update">به‌روزرسانی: %1$s</string>
     <string name="sub_count">%1$d کانفیگ</string>
     <string name="sub_expired">منقضی شده</string>
-    <string name="sub_expires_soon">انقضا: %1$s</string>
+    <string name="sub_expires_soon">%1$s روز مانده</string>
     <string name="sub_expiry_label">انقضا: %1$s</string>
+    <string name="sub_expiry_label_only">انقضا:</string>
     <string name="sub_traffic_infinite">ترافیک: %1$s (نامحدود)</string>
     <string name="sub_empty">هنوز کانفیگی در این اشتراک نیست — به‌روزرسانی بزن</string>
     <string name="theme_dark_only">فقط تم تاریک</string>
@@ -202,8 +203,10 @@
     <string name="bypass_iran">دور زدن سایت‌های ایرانی</string>
     <string name="bypass_iran_desc">دامنه‌ها و IPهای ایران مستقیم وصل می‌شوند — بانک و سامانه‌های دولتی با VPN روشن کار می‌کنند</string>
     <string name="geo_assets">دیتابیس‌های Geo</string>
-    <string name="geo_assets_desc">دیتابیس‌های مسیریابی (geoip.dat / geosite.dat) از Loyalsoldier/v2ray-rules-dat در گیت‌هاب. «به‌روزرسانی» آخرین نسخه را می‌گیرد؛ «بازگردانی» نسخه‌ی همراه اپ را برمی‌گرداند. تغییرات در اتصال بعدی اعمال می‌شود.</string>
+    <string name="geo_assets_desc">دیتابیس‌های مسیریابی (geoip.dat / geosite.dat) از منبعی در گیت‌هاب که پایین انتخاب می‌کنی (پیش‌فرض: Chocolate4U/Iran-v2ray-rules). «به‌روزرسانی» آخرین نسخه را می‌گیرد؛ «بازگردانی» نسخه‌ی همراه اپ را برمی‌گرداند (Loyalsoldier). تغییرات در اتصال بعدی اعمال می‌شود.</string>
     <string name="geo_update">به‌روزرسانی از گیت‌هاب</string>
+    <string name="geo_source">منبع فایل‌های Geo</string>
+    <string name="geo_check_short">بررسی</string>
     <string name="geo_reset">بازگردانی نسخه‌ی باندل</string>
     <string name="update_need_permission">اجازه‌ی نصب لازم است — برای اجازه‌دادن لمس کنید</string>
     <string name="battery_optimization">بهینه‌سازی باتری فعال است</string>
@@ -212,6 +215,9 @@
     <string name="no_core_log">هنوز لاگی نیست — اول وصل شوید</string>
     <string name="share_swift_log">اشتراک‌گذاری لاگ Swift</string>
     <string name="view_swift_log">مشاهده لاگ Swift</string>
+    <string name="view_logs">مشاهده لاگ‌ها</string>
+    <string name="log_pick_xray">ایکس‌ری</string>
+    <string name="log_pick_swift">سوئیفت</string>
     <string name="swift_log_refresh">تازه‌سازی</string>
     <string name="log_copy">کپی</string>
     <string name="swift_log_share">اشتراک‌گذاری</string>
@@ -238,7 +244,7 @@
     <string name="reset_settings">بازنشانی تنظیمات</string>
     <string name="reset_confirm">همه تنظیمات به حالت پیش‌فرض برگردد؟ کانفیگ‌ها حفظ می‌شوند.</string>
     <string name="about">درباره KUVA VPN</string>
-    <string name="update_check">بررسی به‌روزرسانی</string>
+    <string name="update_check">به‌روزرسانی KUVA</string>
     <string name="update_checking">در حال بررسی…</string>
     <string name="update_latest">روی آخرین نسخه هستید (%s)</string>
     <string name="update_available">نسخه‌ی %s موجود است</string>
@@ -262,6 +268,10 @@
     <string name="notif_disconnected">قطع است</string>
     <string name="notif_stop">توقف</string>
     <string name="notif_speed">↑ %1$s  ↓ %2$s</string>
+    <string name="notif_connected_tunnel">متصل — %1$s</string>
+    <string name="notif_tunnel_warp">وارپ</string>
+    <string name="notif_tunnel_warp_psiphon">وارپ + سایفون</string>
+    <string name="notif_show_speed">نمایش سرعت در نوتیفیکیشن</string>
     <string name="notif_sub_expiring">اشتراک در حال انقضا: %1$s</string>
 
     <!-- Diagnostics -->
@@ -296,6 +306,9 @@
     <string name="fmt_bytes_mb">%.1f MB</string>
     <string name="fmt_bytes_gb">%.2f GB</string>
     <string name="toast_imported_count">%1$d کانفیگ اضافه شد</string>
+    <string name="toast_sub_updated">ساب آپدیت شد</string>
+    <string name="toast_sub_added">ساب اضافه شد</string>
+    <string name="toast_sub_update_failed">آپدیت ناموفق بود</string>
     <string name="toast_no_valid_config">هیچ لینک معتبری در کلیپ‌بورد نبود</string>
     <string name="toast_empty_clipboard">کلیپ‌بورد خالی است</string>
 <string name="more_options">گزینه‌ها</string>
@@ -321,4 +334,8 @@
     <string name="fmt_val_mb">%1$d مگابایت</string>
     <string name="edit_value"></string>
     <string name="invalid_value_hint">مقدار باید بین %1$d تا %2$d باشد</string>
+    <string name="bug_report">ارسال گزارش مشکل</string>
+    <string name="bug_report_failed">ساخت گزارش ناموفق بود</string>
+    <string name="telegram_channel">کانال تلگرام</string>
+    <string name="github_repo">مخزن گیت‌هاب</string>
 </resources>

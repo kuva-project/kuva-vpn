@@ -66,6 +66,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kuva.vpn.R
 import com.kuva.vpn.ui.common.CountryFlag
+import com.kuva.vpn.ui.navigation.LocalNavController
 import com.kuva.vpn.domain.model.ConnectionState
 import com.kuva.vpn.util.Formatters
 import com.kuva.vpn.ui.theme.Gold
@@ -340,8 +341,8 @@ fun DashboardScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Image(
-                    painter = painterResource(if (isFa) R.drawable.ic_lang_en else R.drawable.ic_lang_fa),
-                    contentDescription = if (isFa) "English" else "فارسی",
+                    painter = painterResource(if (isFa) R.drawable.ic_lang_fa else R.drawable.ic_lang_en),
+                    contentDescription = if (isFa) "فارسی" else "English",
                     modifier = Modifier.size(48.dp),   // visual size: between the two old looks
                 )
             }
@@ -349,8 +350,20 @@ fun DashboardScreen(
         }  // end LTR header provider
 
         // update-available banner (auto-dismisses after 8s)
+        // tapping it opens Settings and auto-starts the update check
+        val navController = LocalNavController.current
         androidx.compose.animation.AnimatedVisibility(visible = showUpdateBanner) {
-            UpdateBanner()
+            UpdateBanner(onOpenSettings = {
+                (exitContext.applicationContext as com.kuva.vpn.KuvaApplication)
+                    .runUpdateCheck.value = true
+                navController?.navigate(
+                    com.kuva.vpn.ui.navigation.Routes.SETTINGS,
+                ) {
+                    popUpTo(com.kuva.vpn.ui.navigation.Routes.HOME) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            })
         }
 
         Spacer(Modifier.height(12.dp))
@@ -431,7 +444,7 @@ fun DashboardScreen(
             ) {
                 Text(
                     stringResource(R.string.engine_xray),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = if (engineMode == "xray") FontWeight.Bold else FontWeight.SemiBold,
                     color = if (engineMode == "xray") NeonSwitchBlue else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -441,7 +454,7 @@ fun DashboardScreen(
                 )
                 Text(
                     stringResource(R.string.engine_swift),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = if (engineMode == "swift") FontWeight.Bold else FontWeight.SemiBold,
                     color = if (engineMode == "swift") NeonSwitchBlue else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -707,7 +720,7 @@ private fun SwiftCard(psiphonOn: Boolean, isFa: Boolean) {
 }
 
 @Composable
-private fun UpdateBanner() {
+private fun UpdateBanner(onOpenSettings: () -> Unit = {}) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -716,6 +729,7 @@ private fun UpdateBanner() {
             .clip(RoundedCornerShape(16.dp))
             .background(Color(0xFF1B1726))
             .border(1.dp, Gold.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
+            .clickable { onOpenSettings() }
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Box(

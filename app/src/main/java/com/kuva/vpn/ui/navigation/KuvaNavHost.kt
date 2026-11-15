@@ -72,6 +72,7 @@ fun KuvaNavHost(sharedLink: String? = null) {
     )
 
     // bottom nav locked LTR: tab order identical in fa/en, only labels translate
+    androidx.compose.runtime.CompositionLocalProvider(LocalNavController provides navController) {
     Scaffold(
         bottomBar = {
             androidx.compose.runtime.CompositionLocalProvider(
@@ -163,6 +164,7 @@ fun KuvaNavHost(sharedLink: String? = null) {
             composable(Routes.SETTINGS) { SettingsScreen() }
         }
     }
+    }  // end LocalNavController provider
 }
 
 /** Forces LTR layout for its content regardless of app locale. */

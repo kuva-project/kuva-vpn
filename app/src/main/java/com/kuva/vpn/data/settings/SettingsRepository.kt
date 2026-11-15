@@ -55,6 +55,8 @@ data class AppSettings(
     val engineMode: String = "xray",
     val swiftH3: Boolean = false,      // HTTP/3 (QUIC) transport for Swift
     val swiftScan: Boolean = true,     // route scan before Swift connect
+    val geoSource: String = "Chocolate4U/Iran-v2ray-rules", // Geo databases repo
+    val showNotifSpeed: Boolean = false, // up/down speed in the status-bar notification
     val swiftPsiphon: Boolean = false, // route Swift through the Psiphon network
     // preferred psiphon exit country: "" = Auto, otherwise ISO-2 like "US"/"DE"
     val swiftPsiphonCountry: String = "",
@@ -101,6 +103,8 @@ class SettingsRepository @Inject constructor(
         val engineMode = stringPreferencesKey("engine_mode")
         val swiftH3 = booleanPreferencesKey("swift_h3")
         val swiftScan = booleanPreferencesKey("swift_scan")
+        val geoSource = stringPreferencesKey("geo_source")
+        val showNotifSpeed = booleanPreferencesKey("notif_show_speed")
         val swiftPsiphon = booleanPreferencesKey("swift_psiphon")
         val swiftPsiphonCountry = stringPreferencesKey("swift_psiphon_country")
     }
@@ -133,6 +137,8 @@ class SettingsRepository @Inject constructor(
             engineMode = p[Keys.engineMode] ?: "xray",
             swiftH3 = p[Keys.swiftH3] ?: false,
             swiftScan = p[Keys.swiftScan] ?: true,
+            geoSource = p[Keys.geoSource] ?: "Chocolate4U/Iran-v2ray-rules",
+            showNotifSpeed = p[Keys.showNotifSpeed] ?: false,
             swiftPsiphon = p[Keys.swiftPsiphon] ?: false,
             swiftPsiphonCountry = p[Keys.swiftPsiphonCountry] ?: "",
         )
@@ -174,6 +180,8 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { it[Keys.swiftPsiphonCountry] = safe }
     }
     suspend fun setSwiftScan(b: Boolean) = context.dataStore.edit { it[Keys.swiftScan] = b }
+    suspend fun setGeoSource(src: String) = context.dataStore.edit { it[Keys.geoSource] = src }
+    suspend fun setShowNotifSpeed(b: Boolean) = context.dataStore.edit { it[Keys.showNotifSpeed] = b }
     suspend fun setStatsEnabled(b: Boolean) = context.dataStore.edit { it[Keys.stats] = b }
     suspend fun setMtu(v: Int) = context.dataStore.edit { it[Keys.mtu] = v }
     suspend fun setSocksPort(v: Int) = context.dataStore.edit { it[Keys.socksPort] = v }

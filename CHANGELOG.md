@@ -2,6 +2,48 @@
 
 All notable changes to KUVAVpn are documented here.
 
+## v1.2.1 — 2026-11-15
+
+### Added
+- **Colored status banners** at the bottom of the config screens: green for
+  success (configs added, subscription added/updated), yellow for failures
+  (subscription update failed), each with a fitting icon and auto-fit width.
+- A **spinner on the subscription refresh button** while the update is running
+  (the button can't be double-tapped anymore).
+
+### Fixed
+- **Undo banner now actually appears** after deleting a config or a
+  subscription (in both My Configs and the free-vault screen) — a lifecycle
+  gate evaluated once at composition kept the undo listener from ever starting.
+- The undo/delete banner got its own neutral dark style (red ✕ mark, purple
+  **Undo** action), 25% narrower than the colored ones, and auto-dismisses
+  after **4 s** for a single config / **6 s** for a whole subscription —
+  after that the deletion becomes permanent.
+- Adding a subscription by dialog, QR or clipboard now shows the same green
+  **"Sub added"** confirmation with correct wording.
+
+## v1.2.0 — 2026-11-13
+
+### Added
+- **Psiphon reverse-mode routing for Kuva Swift** (WARP → Psiphon): a per-country
+  psiphon layer rides inside the MASQUE tunnel, with a 28-country exit picker
+  (dashboard quick card + sheet with live flags). Reverse mode dials the whole
+  tunnel through psiphon, so every probe already sees the true psiphon exit.
+- **Honest Swift progress bar**: fully event-driven percentage (identity ready,
+  gateway scan candidates, best gateway, TLS established, connect-ip 200,
+  data-plane validation, WARP on) — monotonic, no fake stalls at 90%; a
+  per-stage localized label is shown under the bar (EN + FA).
+- **Tunnel watchdog**: `h2 keepalive timeout` / `connection aborted` drops are
+  detected from core logs (the core process survives and self-reconnects, so
+  process-death callbacks never fired); the UI honestly shows Swift connecting
+  again and recovers automatically within up to 180 s, falling back to the full
+  reconnect path otherwise.
+
+### Fixed
+- Stat tiles (Time / Ping / Download / Upload) on the dashboard are now truly
+  centered — the inner column takes the full card width and every line is
+  centered (EN + FA).
+
 ## v1.1.1 — 2026-11-12
 
 ### Fixed

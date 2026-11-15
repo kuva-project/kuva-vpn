@@ -112,7 +112,12 @@ class DashboardViewModel @Inject constructor(
 
     fun clearExitIp() = connRepo.clearExitIp()
 
-    fun setEngineMode(mode: String) = viewModelScope.launch { settings.setEngineMode(mode) }
+    /** Switch engine; a live connection restarts on the NEW engine right
+     *  away instead of waiting for the next connect. */
+    fun setEngineMode(mode: String) = viewModelScope.launch {
+        settings.setEngineMode(mode)
+        restartEngineIfActive()
+    }
 
     /** Toggle psiphon from the dashboard card; a live connection restarts so
      *  the change applies immediately instead of "on next connect". */
@@ -129,6 +134,21 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             settings.setSwiftPsiphonCountry(cc)
             restartSwiftIfActive()
+        }
+    }
+
+    /** stop+start for ANY active or connecting state — used by the engine
+     *  switch so the new engine takes effect immediately. */
+    private suspend fun restartEngineIfActive() {
+        when (connRepo.state.value) {
+            is ConnectionState.Connected,
+            is ConnectionState.Connecting,
+            is ConnectionState.SwiftConnecting -> {
+                vpnControl.requestStop(app())
+                kotlinx.coroutines.delay(1200)   // let the service tear down
+                vpnControl.requestStart(app())
+            }
+            else -> Unit
         }
     }
 

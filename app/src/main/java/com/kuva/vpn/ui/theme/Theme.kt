@@ -13,6 +13,12 @@ import androidx.compose.ui.unit.sp
 val ForestGreen = Color(0xFF123B2A)
 val ForestGreenDeep = Color(0xFF0A261A)
 val ForestGreenSoft = Color(0xFF1C5038)
+// light neon purple accent — the app-wide accent color (user request:
+// dialogs and interactive elements use this instead of the old gold)
+val NeonPurple = Color(0xFFB026FF)
+val NeonPurpleLight = Color(0xFFE0B0FF)
+val NeonPurpleDeep = Color(0xFF3B1E63)
+
 val Gold = Color(0xFFD4AF37)
 val GoldLight = Color(0xFFF0D278)
 val GoldDark = Color(0xFF8C6919)
@@ -25,10 +31,11 @@ val StatusRed = Color(0xFFFF1744)
 val StatusGray = Color(0xFF9E9E9E)   // idle/disconnected state color
 
 private val DarkColors = darkColorScheme(
-    primary = Gold,
-    onPrimary = ForestGreenDeep,
-    primaryContainer = GoldDark,
-    onPrimaryContainer = Cream,
+    // matches the Settings screen card-title purple (0xFFD08FFF)
+    primary = Color(0xFFD08FFF),
+    onPrimary = Color(0xFF1A0526),   // dark text on the light-purple fill
+    primaryContainer = NeonPurpleDeep,
+    onPrimaryContainer = NeonPurpleLight,
     secondary = ForestGreenSoft,
     onSecondary = Cream,
     background = Charcoal,

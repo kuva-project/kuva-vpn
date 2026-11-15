@@ -29,6 +29,7 @@ class TrafficStatsCollector @Inject constructor(
     @ApplicationContext private val context: Context,
     private val connRepo: ConnectionRepositoryImpl,
     private val notifier: VpnNotifier,
+    private val settingsRepo: com.kuva.vpn.data.settings.SettingsRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
@@ -72,7 +73,7 @@ class TrafficStatsCollector @Inject constructor(
                         if ((up != lastNotifUp || down != lastNotifDown) &&
                             now - lastNotifMs >= minInterval
                         ) {
-                            notifier.updateSpeed(up, down)
+                            notifier.updateSpeed(up, down, settingsRepo.current.showNotifSpeed)
                             lastNotifUp = up
                             lastNotifDown = down
                             lastNotifMs = now

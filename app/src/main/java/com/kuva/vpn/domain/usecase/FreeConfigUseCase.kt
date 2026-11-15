@@ -89,8 +89,8 @@ class FreeConfigUseCase @Inject constructor(
     fun sourceCatalog(): List<SourceDef> = listOf(
         SourceDef(1, "Aggregator", "mahdibland - merged daily, raw mix",
             DefaultSources.RawUrl("[1]", "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_merge.txt")),
-        SourceDef(2, "Pawdroid", "GitHub sub - big curated list (base64)",
-            DefaultSources.SubUrl("[2]", "https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub")),
+        SourceDef(2, "NoMoreWalls", "Curated mix, refreshed regularly (base64)",
+            DefaultSources.SubUrl("[2]", "https://raw.githubusercontent.com/peasoft/NoMoreWalls/master/list.txt")),
         SourceDef(3, "V2rayCollector", "GitHub raw mix - untested",
             DefaultSources.RawUrl("[3]", "https://raw.githubusercontent.com/MhdiTaheri/V2rayCollector/main/sub/mix")),
         SourceDef(4, "Au1rxx", "HTTP-tested hourly, top ~150 only",
@@ -101,8 +101,8 @@ class FreeConfigUseCase @Inject constructor(
             DefaultSources.RawUrl("[6]", "https://raw.githubusercontent.com/hamedcode/port-based-v2ray-configs/main/sub/port_443.txt")),
         SourceDef(7, "0xRadikal", "Top 100, refreshed every 15m",
             DefaultSources.SubUrl("[7]", "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/top100.txt")),
-        SourceDef(8, "FreeFq", "GitHub sub - classic list (base64)",
-            DefaultSources.SubUrl("[8]", "https://raw.githubusercontent.com/freefq/free/master/v2")),
+        SourceDef(8, "SoliSpirit", "Large rotating pool (~880 configs)",
+            DefaultSources.RawUrl("[8]", "https://raw.githubusercontent.com/SoliSpirit/v2ray-configs/main/Subscriptions/Sub10.txt")),
     )
 
     /** Every catalog source (used when the user has not picked any set). */

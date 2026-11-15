@@ -60,14 +60,26 @@ class VpnNotifier @Inject constructor(
         nm.notify(ID, base(b))
     }
 
-    fun notifyConnected(name: String?) {
+    /**
+     * [subtitle] is the Swift tunnel kind ("WARP" / "WARP + Psiphon") or null
+     * for Xray (which keeps the plain "Connected — <config>").
+     * [showSpeed]: user opt-in from Settings (default off) — when true the
+     * live up/down speeds are shown as the notification's second line.
+     */
+    fun notifyConnected(name: String?, subtitle: String? = null, showSpeed: Boolean = false) {
+        val title = if (subtitle != null)
+            context.getString(R.string.notif_connected_tunnel, subtitle)
+        else
+            context.getString(R.string.notif_connected, name ?: "")
         val b = NotificationCompat.Builder(context, CHANNEL)
-            .setContentTitle(context.getString(R.string.notif_connected, name ?: ""))
-            .setContentText("")
+            .setContentTitle(title)
+            .setContentText(if (showSpeed) speedPlaceholder else "")
         nm.notify(ID, base(b))
     }
 
-    fun updateSpeed(up: String, down: String) {
+    /** Live speed line — called only when the user enabled it in Settings. */
+    fun updateSpeed(up: String, down: String, enabled: Boolean) {
+        if (!enabled) return
         val b = NotificationCompat.Builder(context, CHANNEL)
             .setContentTitle(context.getString(R.string.notif_speed, up, down))
             .setContentText("")
@@ -94,6 +106,9 @@ class VpnNotifier @Inject constructor(
     companion object {
         private const val CHANNEL = "kuva_vpn_status"
         private const val ID = 42
+
+        /** reserved first speed line so the title swaps without layout jump */
+        private const val speedPlaceholder = "↑ 0 KB/s  ↓ 0 KB/s"
 
         /** Service-internal notification id used with startForeground(). */
         const val FOREGROUND_ID = 42

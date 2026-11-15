@@ -26,6 +26,9 @@ class KuvaApplication : Application() {
     /** result of the once-per-app-start update check; drives the banner + red dot */
     val updateAvailable = MutableStateFlow(false)
 
+    /** set when the user taps the update banner: Settings auto-runs a check */
+    val runUpdateCheck = MutableStateFlow(false)
+
     override fun onCreate() {
         super.onCreate()
         instance = this

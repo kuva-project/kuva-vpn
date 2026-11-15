@@ -114,7 +114,7 @@
 
     <!-- My configs / subscriptions -->
     <string name="add_config">Add Config</string>
-    <string name="add_manual">Add Manual</string>
+    <string name="add_manual">Add Conf.</string>
     <string name="add_sub">Add sub</string>
     <string name="sub_update">Update now</string>
     <string name="sub_refresh">Refresh</string>
@@ -124,6 +124,7 @@
     <string name="sub_expired">Expired</string>
     <string name="sub_expires_soon">Expires in %1$s</string>
     <string name="sub_expiry_label">Expiry: %1$s</string>
+    <string name="sub_expiry_label_only">Expiry:</string>
     <string name="sub_traffic_infinite">Traffic: %1$s (unlimited)</string>
     <string name="sub_empty">No configs in this subscription yet — tap Update</string>
     <string name="theme_dark_only">Dark theme only</string>
@@ -205,9 +206,11 @@
     <string name="kill_switch_desc">Blocks all traffic if the tunnel drops (API 29+)</string>
     <string name="bypass_iran">Bypass Iranian sites</string>
     <string name="bypass_iran_desc">Iranian domains and IPs go direct — banks &amp; gov sites work while the VPN is on</string>
-    <string name="geo_assets">Geo databases</string>
-    <string name="geo_assets_desc">Routing databases (geoip.dat / geosite.dat) from Loyalsoldier/v2ray-rules-dat on GitHub. Update pulls the latest release; Restore brings back the copies bundled in the app. Changes apply on the next connect.</string>
+    <string name="geo_assets">Geo Databases</string>
+    <string name="geo_assets_desc">Routing databases (geoip.dat / geosite.dat) from a GitHub source you pick below (default: Chocolate4U/Iran-v2ray-rules). Update pulls the latest release; Restore brings back the copies bundled in the app (Loyalsoldier). Changes apply on the next connect.</string>
     <string name="geo_update">Update from GitHub</string>
+    <string name="geo_source">Geo file source</string>
+    <string name="geo_check_short">Check</string>
     <string name="geo_reset">Restore bundled</string>
     <string name="ipv6">IPv6 support</string>
     <string name="split_tunneling">Split tunneling</string>
@@ -217,7 +220,7 @@
     <string name="reset_settings">Reset application settings</string>
     <string name="reset_confirm">Reset all settings to defaults? Configurations are kept.</string>
     <string name="about">About KUVA VPN</string>
-    <string name="update_check">Check for updates</string>
+    <string name="update_check">Update KUVA</string>
     <string name="update_checking">Checking…</string>
     <string name="update_latest">You are on the latest version (%s)</string>
     <string name="update_available">Version %s is available</string>
@@ -230,7 +233,7 @@
     <string name="battery_optimization">Battery optimization active</string>
     <string name="battery_optimization_desc">Android may kill the VPN in background — tap to allow unrestricted battery use</string>
     <string name="update_failed">Update failed: %s</string>
-    <string name="privacy">Privacy policy</string>
+    <string name="privacy">Privacy Policy</string>
     <string name="licenses">Open-source licenses</string>
     <string name="version">Version</string>
     <string name="app_desc">KUVA VPN — premium VPN powered by Xray-core</string>
@@ -244,6 +247,10 @@
     <string name="notif_disconnected">Disconnected</string>
     <string name="notif_stop">Stop</string>
     <string name="notif_speed">↑ %1$s  ↓ %2$s</string>
+    <string name="notif_connected_tunnel">Connected — %1$s</string>
+    <string name="notif_tunnel_warp">WARP</string>
+    <string name="notif_tunnel_warp_psiphon">WARP + Psiphon</string>
+    <string name="notif_show_speed">Speed in notification</string>
     <string name="notif_sub_expiring">Subscription expiring: %1$s</string>
 
     <!-- Diagnostics -->
@@ -278,6 +285,9 @@
     <string name="fmt_bytes_mb">%.1f MB</string>
     <string name="fmt_bytes_gb">%.2f GB</string>
     <string name="toast_imported_count">%1$d config(s) added</string>
+    <string name="toast_sub_updated">Sub updated</string>
+    <string name="toast_sub_added">Sub added</string>
+    <string name="toast_sub_update_failed">Update Failed</string>
     <string name="toast_no_valid_config">No valid link was found in the clipboard</string>
     <string name="toast_empty_clipboard">Clipboard is empty</string>
 <string name="more_options">Options</string>
@@ -308,6 +318,9 @@
     <string name="share_swift_log">Share Swift log</string>
     <string name="no_swift_log">No Swift log yet — connect in Swift mode first</string>
     <string name="view_swift_log">View Swift log</string>
+    <string name="view_logs">View Logs</string>
+    <string name="log_pick_xray">Xray</string>
+    <string name="log_pick_swift">Swift</string>
     <string name="swift_log_refresh">Refresh</string>
     <string name="log_copy">Copy</string>
     <string name="swift_log_share">Share</string>
@@ -326,4 +339,8 @@
     <string name="psiphon_auto">Auto</string>
     <string name="swift_psiphon_country">Psiphon exit country</string>
     <string name="swift_psiphon_country_auto">Auto</string>
+    <string name="bug_report">Send Bug Report</string>
+    <string name="bug_report_failed">Could not build the report</string>
+    <string name="telegram_channel">Telegram Channel</string>
+    <string name="github_repo">GitHub Repository</string>
 </resources>

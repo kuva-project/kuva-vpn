@@ -15,13 +15,15 @@ android {
         applicationId = "com.kuva.vpn"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.1.1"
+        versionCode = 3
+        versionName = "1.2.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         ndk {
-            // ABIs shipped in core-engine/libs
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            // ABIs shipped in core-engine/libs. x86 is NOT shipped: the
+            // Aether core has no x86 build upstream, so Swift/Psiphon could
+            // never work there (Xray-only half-broken APK is worse than none).
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
     }
 
@@ -35,7 +37,7 @@ android {
                 it.contains("Release", true) || it.contains("Bundle", true)
             }
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = true
         }
     }
@@ -131,7 +133,7 @@ android {
     }
 }
 
-// Per-ABI versionCode: universal < v7a < arm64 < x86 < x86_64 (AGP 8 variant API).
+// Per-ABI versionCode: universal < v7a < arm64 < x86_64 (AGP 8 variant API).
 androidComponents {
     onVariants(selector().withBuildType("release")) { variant ->
         variant.outputs.forEach { output ->
@@ -142,12 +144,13 @@ androidComponents {
                 "universal" -> 1
                 "armeabi-v7a" -> 2
                 "arm64-v8a" -> 3
-                "x86" -> 4
+                // stays 5 (was x86<5): x86_64 users must keep their upgrade path
+                // — a lower code would be a downgrade and block installing over v1.2.0
                 "x86_64" -> 5
                 else -> 1
             }
-            // +5 was v1.1.0's offset; +6 makes v1.1.1 install over it
-            output.versionCode.set(code * 1000 + 6)
+            // +5 v1.1.0, +6 v1.1.1, +7 v1.2.0, +8 v1.2.1 — installs over all older ones
+            output.versionCode.set(code * 1000 + 8)
         }
     }
 }

@@ -186,20 +186,84 @@ interface FreeConfigSource {
 /** Built-in public source adapters (all user-removable via settings JSON). */
 object DefaultSources {
 
+    /**
+     * Mirror fallback: raw.githubusercontent.com is unreachable from some
+     * networks (connection resets before any data arrives). jsDelivr's public
+     * CDN mirrors the exact same GitHub files on a different domain, so a
+     * failed raw fetch is retried once against the jsDelivr equivalent.
+     * The primary URL stays authoritative — the mirror is only a fallback.
+     */
+    private fun jsDelivrMirror(url: String): String? {
+        val m = Regex(
+            "https://raw\\.githubusercontent\\.com/([^/]+)/([^/]+)/([^/]+)/(.+)"
+        ).find(url.trim()) ?: return null
+        val (owner, repo, branch, path) = m.destructured
+        return "https://cdn.jsdelivr.net/gh/$owner/$repo@$branch/$path"
+    }
+
+    /**
+     * GitHub API raw mirror: the official contents API serves the exact file
+     * bytes with Accept: application/vnd.github.raw. api.github.com lives on
+     * a different domain than raw.githubusercontent.com and is reachable
+     * from networks where both raw.githubusercontent.com AND *.jsdelivr.net
+     * are blocked. Unauthenticated rate limit is 60 req/h — plenty for the
+     * eight catalog sources. Returns null when unusable (caller falls back).
+     */
+    private fun fetchApiRaw(client: OkHttpClient, url: String): String? {
+        val m = Regex(
+            "https://raw\\.githubusercontent\\.com/([^/]+)/([^/]+)/([^/]+)/(.+)"
+        ).find(url.trim()) ?: return null
+        val (owner, repo, branch, path) = m.destructured
+        return try {
+            val req = Request.Builder()
+                .url("https://api.github.com/repos/$owner/$repo/contents/$path?ref=$branch")
+                .header("Accept", "application/vnd.github.raw")
+                .header("User-Agent", "KUVAVpn/1.0 (config discovery)")
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) null else resp.body?.string()?.takeIf { it.isNotBlank() }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Plain blocking GET of a text resource; throws on non-2xx. */
+    private fun fetchUrl(client: OkHttpClient, url: String): String {
+        val req = Request.Builder().url(url)
+            .header("User-Agent", "KUVAVpn/1.0 (config discovery)")
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
+            return resp.body?.string().orEmpty()
+        }
+    }
+
+    /** fetchUrl with one automatic jsDelivr retry when the primary fails. */
+    private fun fetchWithMirror(client: OkHttpClient, url: String): String {
+        return try {
+            fetchUrl(client, url)
+        } catch (e: Exception) {
+            // mirror 1: official GitHub contents API (serves raw bytes)
+            fetchApiRaw(client, url)?.let { return it }
+            // mirror 2: jsDelivr CDN
+            val mirror = jsDelivrMirror(url)
+            if (mirror != null) {
+                try {
+                    return fetchUrl(client, mirror)
+                } catch (_: Exception) { /* fall through: rethrow primary error */ }
+            }
+            throw e
+        }
+    }
+
     /** Raw file endpoints (GitHub raw, gist, any public URL serving config lists). */
     class RawUrl(
         override val name: String,
         private val url: String,
     ) : FreeConfigSource {
-        override suspend fun fetch(client: OkHttpClient): String {
-            val req = Request.Builder().url(url)
-                .header("User-Agent", "KUVAVpn/1.0 (config discovery)")
-                .build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
-                return resp.body?.string().orEmpty()
-            }
-        }
+        override suspend fun fetch(client: OkHttpClient): String =
+            fetchWithMirror(client, url)
     }
 
     /**
@@ -229,9 +293,7 @@ object DefaultSources {
                 val sb = StringBuilder()
                 urls.take(MAX_FILES).forEach { u ->
                     try {
-                        client.newCall(Request.Builder().url(u).build()).execute().use { r ->
-                            if (r.isSuccessful) sb.appendLine(r.body?.string().orEmpty())
-                        }
+                        sb.appendLine(fetchWithMirror(client, u))
                     } catch (_: Exception) { }
                 }
                 return sb.toString()
@@ -278,23 +340,17 @@ object DefaultSources {
         private val url: String,
     ) : FreeConfigSource {
         override suspend fun fetch(client: OkHttpClient): String {
-            val req = Request.Builder().url(url.trim())
-                .header("User-Agent", "KUVAVpn/1.0 (config discovery)")
-                .build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
-                val body = resp.body?.string().orEmpty().trim()
-                // plain share-link list: pass through untouched
-                if (body.contains("://")) return body
-                // base64 subscription: try standard then URL-safe alphabets
-                val cleaned = body.replace(Regex("\\s+"), "")
-                val decoded = runCatching {
-                    android.util.Base64.decode(cleaned, android.util.Base64.DEFAULT).toString(Charsets.UTF_8)
-                }.recoverCatching {
-                    android.util.Base64.decode(cleaned, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP).toString(Charsets.UTF_8)
-                }.getOrDefault(body)
-                return if (decoded.contains("://")) decoded else body
-            }
+            val body = fetchWithMirror(client, url.trim()).trim()
+            // plain share-link list: pass through untouched
+            if (body.contains("://")) return body
+            // base64 subscription: try standard then URL-safe alphabets
+            val cleaned = body.replace(Regex("\\s+"), "")
+            val decoded = runCatching {
+                android.util.Base64.decode(cleaned, android.util.Base64.DEFAULT).toString(Charsets.UTF_8)
+            }.recoverCatching {
+                android.util.Base64.decode(cleaned, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP).toString(Charsets.UTF_8)
+            }.getOrDefault(body)
+            return if (decoded.contains("://")) decoded else body
         }
     }
 }

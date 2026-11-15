@@ -6,15 +6,36 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import com.kuva.vpn.ui.theme.NeonPurple
+import com.kuva.vpn.ui.theme.StatusGreen
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.runtime.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -62,49 +83,87 @@ fun MyConfigsScreen(
     var shareTitle by remember { mutableStateOf("") }
 
     val snackbarHostState = remember { SnackbarHostState() }
+    // color hint for the status snackbar: "ok" green / "fail" yellow / null = default look
+    var bannerKind by remember { mutableStateOf<String?>(null) }
+    // subscriptions whose refresh is running -> spinner on the update button
+    val updatingSubIds by viewModel.updatingSubIds.collectAsState()
     val speedDoneFmt = stringResource(R.string.speed_test_done)
     val speedZeroMsg = stringResource(R.string.speed_test_zero)
     val noValidMsg = stringResource(R.string.toast_no_valid_config)
     val importedFmt = stringResource(R.string.toast_imported_count)
+    val subUpdatedMsg = stringResource(R.string.toast_sub_updated)
+    val subAddedMsg = stringResource(R.string.toast_sub_added)
+    val subFailedMsg = stringResource(R.string.toast_sub_update_failed)
     val emptyClipMsg = stringResource(R.string.toast_empty_clipboard)
     val clipSubMsg = stringResource(R.string.clipboard_sub_added)
     LaunchedEffect(Unit) {
         viewModel.events.collect { ev ->
             when (ev) {
-                is MyConfigViewModel.Event.Imported ->
-                    snackbarHostState.showSnackbar(String.format(importedFmt, ev.count))
-                MyConfigViewModel.Event.NothingValid ->
+                is MyConfigViewModel.Event.Imported -> {
+                    val m = String.format(importedFmt, ev.count)
+                    bannerKind = "ok"
+                    snackbarHostState.showSnackbar(m)
+                    bannerKind = null
+                }
+                MyConfigViewModel.Event.SubUpdated -> {
+                    bannerKind = "ok"
+                    snackbarHostState.showSnackbar(subUpdatedMsg)
+                    bannerKind = null
+                }
+                MyConfigViewModel.Event.SubAdded -> {
+                    bannerKind = "ok"
+                    snackbarHostState.showSnackbar(subAddedMsg)
+                    bannerKind = null
+                }
+                MyConfigViewModel.Event.SubUpdateFailed -> {
+                    bannerKind = "fail"
+                    snackbarHostState.showSnackbar(subFailedMsg)
+                    bannerKind = null
+                }
+                MyConfigViewModel.Event.NothingValid -> {
+                    bannerKind = null
                     snackbarHostState.showSnackbar(noValidMsg)
-                MyConfigViewModel.Event.EmptyClipboard ->
+                }
+                MyConfigViewModel.Event.EmptyClipboard -> {
+                    bannerKind = null
                     snackbarHostState.showSnackbar(emptyClipMsg)
-                MyConfigViewModel.Event.ClipboardSub ->
+                }
+                MyConfigViewModel.Event.ClipboardSub -> {
+                    bannerKind = null
                     snackbarHostState.showSnackbar(clipSubMsg)
-                is MyConfigViewModel.Event.SpeedResult ->
+                }
+                is MyConfigViewModel.Event.SpeedResult -> {
+                    bannerKind = null
                     snackbarHostState.showSnackbar(
                         if (ev.downKbps > 0) String.format(speedDoneFmt,
                             com.kuva.vpn.util.Formatters.speed((ev.downKbps * 1000).toLong()))
                         else speedZeroMsg
                     )
+                    bannerKind = null
+                }
             }
         }
     }
 
-    // undo snackbar: deleted config/subscription is held in memory for 5+ s;
+    // undo banner: subscription delete stays 6 s, single config delete 4 s;
     // Undo restores it (sub + its configs together), otherwise the stash is dropped
     val undoCfgFmt = stringResource(R.string.undo_deleted_config)
     val undoSubFmt = stringResource(R.string.undo_deleted_sub)
     val undoLabel = stringResource(R.string.undo)
-    val lifeOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
-    val isForeground = lifeOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
-    if (isForeground) LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) {
         viewModel.undoEvents.collect { ev ->
             val msg = when (ev) {
                 MyConfigViewModel.UndoEvent.DeletedOne -> undoCfgFmt
                 MyConfigViewModel.UndoEvent.DeletedSub -> undoSubFmt
             }
             snackbarHostState.currentSnackbarData?.dismiss()
-            val r = snackbarHostState.showSnackbar(
-                msg, actionLabel = undoLabel, duration = SnackbarDuration.Indefinite)
+            bannerKind = "undo"
+            val r = kotlinx.coroutines.withTimeoutOrNull(
+                if (ev == MyConfigViewModel.UndoEvent.DeletedSub) 6000L else 4000L
+            ) {
+                snackbarHostState.showSnackbar(
+                    msg, actionLabel = undoLabel, duration = SnackbarDuration.Indefinite)
+            }
             if (r == SnackbarResult.ActionPerformed) viewModel.undoDelete() else viewModel.discardDelete()
         }
     }
@@ -128,7 +187,7 @@ fun MyConfigsScreen(
         if (sharedLink != null) viewModel.importFromLink(sharedLink)
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }, containerColor = Color.Transparent) { innerPad ->
+    Scaffold(snackbarHost = { StatusSnackbarHost(snackbarHostState, bannerKind) }, containerColor = Color.Transparent) { innerPad ->
     Column(Modifier.fillMaxSize().padding(innerPad).padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -150,6 +209,7 @@ fun MyConfigsScreen(
 
         Spacer(Modifier.height(8.dp))
         // same style/size/font as the free-configs screen buttons
+        // ghost neon buttons — same style as the Free Configs screen (purple = primary app color)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             var addMenuOpen by remember { mutableStateOf(false) }
             Button(
@@ -157,12 +217,15 @@ fun MyConfigsScreen(
                 modifier = Modifier.weight(1f),
                 shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    containerColor = Color.Transparent,
+                    contentColor = NeonPurple,
                 ),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                border = BorderStroke(2.dp, Brush.linearGradient(listOf(NeonPurple, Color(0xFF7C4DFF)))),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
             ) {
-                Text(stringResource(R.string.add_manual), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.add_manual), color = NeonPurple, fontWeight = FontWeight.Bold, maxLines = 1)
                 DropdownMenu(expanded = addMenuOpen, onDismissRequest = { addMenuOpen = false }) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.add_config), color = Color.White) },
@@ -174,21 +237,35 @@ fun MyConfigsScreen(
                     )
                 }
             }
-            OutlinedButton(
+            Button(
                 onClick = viewModel::importClipboard,
                 modifier = Modifier.weight(1f),
                 shape = MaterialTheme.shapes.medium,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = NeonPurple,
+                ),
+                border = BorderStroke(2.dp, Brush.linearGradient(listOf(NeonPurple, Color(0xFF7C4DFF)))),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
             ) {
-                Text(stringResource(R.string.import_clipboard), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                Icon(Icons.Filled.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.import_clipboard), color = NeonPurple, fontWeight = FontWeight.Bold, maxLines = 1)
             }
-            OutlinedButton(
+            Button(
                 onClick = { launchQrScan() },
                 modifier = Modifier.weight(1f),
                 shape = MaterialTheme.shapes.medium,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = NeonPurple,
+                ),
+                border = BorderStroke(2.dp, Brush.linearGradient(listOf(NeonPurple, Color(0xFF7C4DFF)))),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
             ) {
-                Text(stringResource(R.string.import_qr), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                Icon(Icons.Filled.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.import_qr), color = NeonPurple, fontWeight = FontWeight.Bold, maxLines = 1)
             }
         }
 
@@ -197,10 +274,22 @@ fun MyConfigsScreen(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (manualProfiles.isEmpty() && subProfiles.isEmpty() && subs.isEmpty()) {
                 item {
-                    Text(stringResource(R.string.no_personal),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 32.dp))
+                    // real empty state: faint neon QR icon + guide line
+                    Column(
+                        Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Icon(
+                            Icons.Filled.QrCode2,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = NeonPurple.copy(alpha = 0.45f),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(stringResource(R.string.no_personal),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
 
@@ -240,6 +329,7 @@ fun MyConfigsScreen(
                     onPingAll = { viewModel.testSubPings(sub.id) },
                     onPingRow = { viewModel.pingSingle(it) },
                     onUpdate = { viewModel.refreshSubscription(sub.id) },
+                    updating = sub.id in updatingSubIds,
                     onDeleteSub = { viewModel.deleteSubscription(sub.id) },
                     onEditSub = { editSub = sub },
                     onExportSub = {
@@ -298,6 +388,7 @@ fun MyConfigsScreen(
         )
     }
     }
+
 }
 
 // ---------------------------------------------------------------- subscription
@@ -323,6 +414,7 @@ private fun SubscriptionSection(
     onExportSub: () -> Unit = {},
     onTogglePin: () -> Unit = {},
     onShareRow: (Profile) -> Unit = {},
+    updating: Boolean = false,           // refresh fetch running -> spinner on the update button
 ) {
     var expanded by remember(sub.id) { mutableStateOf(false) }
     var confirmRemove by remember(sub.id) { mutableStateOf(false) }
@@ -332,19 +424,56 @@ private fun SubscriptionSection(
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.22f)),
     ) {
+        // EDGE-BAR (removable): Box wrapper so the strip can span the card height
+        Box(Modifier.fillMaxWidth()) {
+        // EDGE-BAR strip (delete this Block to revert)
+        Box(
+            Modifier
+                .matchParentSize()
+                .clip(MaterialTheme.shapes.medium)
+        ) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .padding(vertical = 6.dp, horizontal = 0.dp)
+                    .width(3.dp)
+                    .background(
+                        Brush.verticalGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))),
+                        RoundedCornerShape(2.dp)
+                    )
+            )
+        }
         // distinct compact header (user request #2): thinner than config rows
         Column(Modifier.padding(vertical = 6.dp)) {
             // ---- header row: arrow first, then info, then compact right icons ----
             Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 // expand/collapse indicator, BEFORE the header name (user request)
-                Text(if (expanded) "▲" else "▼",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary)
+                val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                val chevRot by animateFloatAsState(
+                    // expanded: point down; collapsed: point toward the text
+                    // start edge — right in English, left in Persian
+                    targetValue = if (expanded) 0f else if (rtl) 90f else -90f,
+                    animationSpec = tween(200),
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp).rotate(chevRot),
+                )
                 Spacer(Modifier.width(6.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(sub.name, fontWeight = FontWeight.Bold, maxLines = 1,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontSize = 16.sp)  // header size (user request)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(sub.name, fontWeight = FontWeight.Bold, maxLines = 1,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 16.sp)  // header size (user request)
+                        // green pulsing dot: this subscription hosts the connected config
+                        if (owned.any { it.id == connectedId }) {
+                            Spacer(Modifier.width(8.dp))
+                            ConnectedDot()
+                        }
+                    }
                     Text(stringResource(R.string.sub_count, owned.size),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -355,41 +484,48 @@ private fun SubscriptionSection(
                     else Image(painterResource(R.drawable.ic_action_ping),
                         contentDescription = null, modifier = Modifier.size(26.dp))
                 }
-                // refresh subscription
-                IconButton(onClick = onUpdate, modifier = Modifier.size(38.dp)) {
-                    ActionIconLarge(R.drawable.ic_action_update)
+                // refresh subscription (spinner while the fetch runs)
+                IconButton(
+                    onClick = onUpdate,
+                    modifier = Modifier.size(38.dp),
+                    enabled = !updating,
+                ) {
+                    if (updating) CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    else ActionIconLarge(R.drawable.ic_action_update)
                 }
                 // three-dot options: pin / edit / export / remove (like the reference menu)
                 var menuOpen by remember { mutableStateOf(false) }
-                IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(30.dp)) {
-                    Icon(
-                        Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.more_options),
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp),
-                    )
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(if (sub.pinned) R.string.unpin_sub else R.string.pin_sub), color = Color.White) },
-                        leadingIcon = { Image(painterResource(R.drawable.ic_pin_white), contentDescription = null, modifier = Modifier.size(26.dp)) },
-                        onClick = { menuOpen = false; onTogglePin() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.edit_sub), color = Color.White) },
-                        leadingIcon = { Image(painterResource(R.drawable.ic_edit_white), contentDescription = null, modifier = Modifier.size(26.dp)) },
-                        onClick = { menuOpen = false; onEditSub() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.export_sub), color = Color.White) },
-                        leadingIcon = { Image(painterResource(R.drawable.ic_share), contentDescription = null, modifier = Modifier.size(26.dp)) },
-                        onClick = { menuOpen = false; onExportSub() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.remove_sub), color = Color.White) },
-                        leadingIcon = { Image(painterResource(R.drawable.ic_action_delete), contentDescription = null, modifier = Modifier.size(26.dp)) },
-                        onClick = { menuOpen = false; confirmRemove = true },
-                    )
+                Box {
+                    IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(30.dp)) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.more_options),
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp),
+                        )
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(if (sub.pinned) R.string.unpin_sub else R.string.pin_sub), color = Color.White) },
+                            leadingIcon = { Image(painterResource(R.drawable.ic_pin_white), contentDescription = null, modifier = Modifier.size(26.dp)) },
+                            onClick = { menuOpen = false; onTogglePin() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.edit_sub), color = Color.White) },
+                            leadingIcon = { Image(painterResource(R.drawable.ic_edit_white), contentDescription = null, modifier = Modifier.size(26.dp)) },
+                            onClick = { menuOpen = false; onEditSub() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.export_sub), color = Color.White) },
+                            leadingIcon = { Image(painterResource(R.drawable.ic_share), contentDescription = null, modifier = Modifier.size(26.dp)) },
+                            onClick = { menuOpen = false; onExportSub() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.remove_sub), color = Color.White) },
+                            leadingIcon = { Image(painterResource(R.drawable.ic_action_delete), contentDescription = null, modifier = Modifier.size(26.dp)) },
+                            onClick = { menuOpen = false; confirmRemove = true },
+                        )
+                    }
                 }
             }
             // ---- metadata: ALWAYS visible; only the arrow shows drawer state ----
@@ -412,7 +548,36 @@ private fun SubscriptionSection(
                 }
                 Text(traffic, style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                // expiry: infinity symbol when no expiry reported
+                // usage bar only when the subscription reports a real quota —
+                // infinite subs keep the plain text (no misleading bar);
+                // gold past 90% as a "quota almost gone" warning
+                val quotaTotal = sub.totalBytes ?: 0L
+                if (quotaTotal > 0L) {
+                    val frac = (used.toFloat() / quotaTotal.toFloat()).coerceIn(0f, 1f)
+                    // neon gradient bar: purple→cyan normally, sharp neon yellow past 90%
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .height(3.dp)
+                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(50))
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(frac)
+                                .background(
+                                    if (frac >= 0.9f)
+                                        Brush.horizontalGradient(listOf(Color(0xFFFFEA00), Color(0xFFFFC400)))
+                                    else
+                                        Brush.horizontalGradient(listOf(Color(0xFFB026FF), Color(0xFF00E5FF))),
+                                    RoundedCornerShape(50)
+                                )
+                        )
+                    }
+                }
+                // expiry: "label: infinity" when no expiry reported;
+                // with a real expiry show only the expiry date (no label)
                 val expireSec = sub.expireEpochSec ?: 0L
                 val daysLeft = if (expireSec == 0L) Long.MAX_VALUE
                     else (expireSec - System.currentTimeMillis() / 1000) / 86400
@@ -421,12 +586,24 @@ private fun SubscriptionSection(
                 } else if (daysLeft < 0) {
                     stringResource(R.string.sub_expired)
                 } else {
-                    stringResource(R.string.sub_expires_soon, "$daysLeft d")
+                    // the actual expiry date instead of remaining days
+                    java.text.SimpleDateFormat("yyyy/MM/dd", java.util.Locale.getDefault())
+                        .format(java.util.Date(expireSec * 1000))
                 }
-                Text(stringResource(R.string.sub_expiry_label, expText),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (expireSec != 0L && daysLeft < 7) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant)
+                // ONE label ("Expiry:" / "انقضا:") always, followed by
+                // the value: infinity, the expiry date, or "expired"
+                val expColor = if (expireSec != 0L && daysLeft < 7) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                // label and value as TWO Texts in one Row — the bidi
+                // algorithm can no longer push the infinity glyph to
+                // its own line in Persian
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.sub_expiry_label_only),
+                        style = MaterialTheme.typography.labelSmall, softWrap = false, color = expColor)
+                    Spacer(Modifier.width(4.dp))
+                    Text(expText,
+                        style = MaterialTheme.typography.labelSmall, softWrap = false, color = expColor)
+                }
                 sub.lastError?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                 }
@@ -438,6 +615,7 @@ private fun SubscriptionSection(
                 }
             }
         }
+        } // EDGE-BAR Box wrapper (delete with the strip Block above)
     }
     // destructive actions always ask first
     if (confirmRemove) {
@@ -474,6 +652,7 @@ private fun SubscriptionSection(
                     pinging = p.id in rowPinging,
                 )
             }
+            Spacer(Modifier.height(4.dp))
         }
     }
 }
@@ -503,16 +682,53 @@ private fun ManualSection(
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.22f)),
     ) {
+        // EDGE-BAR (removable): Box wrapper so the strip can span the card height
+        Box(Modifier.fillMaxWidth()) {
+        // EDGE-BAR strip (delete this Block to revert)
+        Box(
+            Modifier
+                .matchParentSize()
+                .clip(MaterialTheme.shapes.medium)
+        ) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .padding(vertical = 6.dp, horizontal = 0.dp)
+                    .width(3.dp)
+                    .background(
+                        Brush.verticalGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))),
+                        RoundedCornerShape(2.dp)
+                    )
+            )
+        }
         Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             // expand/collapse indicator, BEFORE the header name (user request)
-            Text(if (expanded) "▲" else "▼",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary)
+            val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+            val chevRot by animateFloatAsState(
+                // expanded: point down; collapsed: point toward the text
+                // start edge — right in English, left in Persian
+                targetValue = if (expanded) 0f else if (rtl) 90f else -90f,
+                animationSpec = tween(200),
+            )
+            Icon(
+                Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp).rotate(chevRot),
+            )
             Spacer(Modifier.width(6.dp))
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.section_manual_configs), fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontSize = 16.sp)  // same size as the subscription headers
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.section_manual_configs), fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 16.sp)  // same size as the subscription headers
+                    // green pulsing dot: this section hosts the connected config
+                    if (profiles.any { it.id == connectedId }) {
+                        Spacer(Modifier.width(8.dp))
+                        ConnectedDot()
+                    }
+                }
                 Text(stringResource(R.string.sub_count, profiles.size),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -524,6 +740,7 @@ private fun ManualSection(
                     contentDescription = null, modifier = Modifier.size(26.dp))
             }
         }
+        } // EDGE-BAR Box wrapper (delete with the strip Block above)
     }
     if (expanded) {
         Spacer(Modifier.height(4.dp))
@@ -553,8 +770,24 @@ private fun ManualSection(
                     pinging = p.id in rowPinging,
                 )
             }
+            Spacer(Modifier.height(4.dp))
         }
     }
+}
+
+/** Small pulsing green dot for section headers hosting the connected config. */
+@Composable
+private fun ConnectedDot() {
+    val pulse by rememberInfiniteTransition(label = "dotPulse").animateFloat(
+        initialValue = 0.35f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+        label = "dotAlpha",
+    )
+    Box(
+        Modifier
+            .size(10.dp)
+            .background(StatusGreen.copy(alpha = 0.35f + 0.65f * pulse), CircleShape)
+    )
 }
 
 // ------------------------------------------------------------------- dialogs
@@ -634,4 +867,91 @@ private fun EditSubDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
+}
+
+// single status banner at the bottom of the screen: green success / yellow failure;
+// messages without a color hint (speed test, clipboard, undo) keep the default snackbar look
+@Composable
+private fun StatusSnackbarHost(
+    hostState: SnackbarHostState,
+    kind: String?,
+) {
+    SnackbarHost(hostState) { data ->
+        // full-area box so a wrap-content banner can sit centered at the bottom
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        if (kind == "undo") {
+            // delete/undo banner: dark neutral card, 25% narrower than the colored
+            // ones, white text, purple Undo action
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp)
+                    .widthIn(max = 315.dp)
+                    .background(
+                        Brush.horizontalGradient(listOf(Color(0xFF2A2A2A), Color(0xFF1E1E1E))),
+                        RoundedCornerShape(12.dp),
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "\u2715",
+                    color = Color(0xFFFF5252),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    data.visuals.message,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.width(10.dp))
+                androidx.compose.material3.TextButton(
+                    onClick = { data.performAction() },
+                ) {
+                    Text(
+                        data.visuals.actionLabel ?: "",
+                        color = Color(0xFFB026FF),
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        } else if (kind == null) {
+            androidx.compose.material3.Snackbar(data)
+        } else {
+            val ok = kind == "ok"
+            val fg = if (ok) Color(0xFF003300) else Color(0xFF332600)
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp)
+                    // banner hugs its text instead of stretching full width
+                    .widthIn(max = 420.dp)
+                    .background(
+                        if (ok) Brush.horizontalGradient(listOf(Color(0xFF00E676), Color(0xFF00C853)))
+                        else Brush.horizontalGradient(listOf(Color(0xFFFFEB3B), Color(0xFFFFC107))),
+                        RoundedCornerShape(12.dp),
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (ok) "\u2714" else "\u26A0",
+                    color = fg,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    data.visuals.message,
+                    color = fg,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+        }
+    }
 }

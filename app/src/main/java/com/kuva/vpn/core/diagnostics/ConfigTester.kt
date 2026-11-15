@@ -104,13 +104,19 @@ class ConfigTester @Inject constructor(
             // cooperative cancellation between chunks: stopped ping leaves
             // the not-yet-tested rows untested (pingMs stays null)
             if (shouldCancel?.invoke() == true) return@forEach
-            chunk.mapIndexed { i, p ->
+            // measurements run in parallel on distinct ports, but the results
+            // are COLLECTED first and delivered to onResult SEQUENTIALLY after
+            // awaitAll: onResult mutates non-thread-safe state in the callers
+            // (LinkedHashMap batch buffer + counters) — calling it from 12 IO
+            // threads at once crashed with ConcurrentModificationException
+            val results = chunk.mapIndexed { i, p ->
                 async(Dispatchers.IO) {
                     // port = slot index: guaranteed distinct within the chunk
                     val port = TEST_SOCKS_PORT + i
-                    onResult(p.id, relayPingBounded(p, port))
+                    p.id to relayPingBounded(p, port)
                 }
             }.awaitAll()
+            results.forEach { (id, ms) -> onResult(id, ms) }
         }
     }
 

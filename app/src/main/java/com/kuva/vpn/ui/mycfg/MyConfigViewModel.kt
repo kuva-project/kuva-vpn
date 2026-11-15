@@ -9,6 +9,7 @@ import com.kuva.vpn.domain.usecase.FreeConfigUseCase
 import com.kuva.vpn.domain.usecase.SubscriptionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -84,6 +85,9 @@ class MyConfigViewModel @Inject constructor(
         data object NothingValid : Event
         data object EmptyClipboard : Event
         data object ClipboardSub : Event
+        data object SubUpdated : Event
+        data object SubUpdateFailed : Event
+        data object SubAdded : Event
         data class SpeedResult(val id: Long, val downKbps: Double) : Event
     }
     private val _events = kotlinx.coroutines.flow.MutableSharedFlow<Event>(extraBufferCapacity = 8)
@@ -145,7 +149,6 @@ class MyConfigViewModel @Inject constructor(
                 // name it from the host, then fetch immediately (same as QR sub import)
                 val host = runCatching { java.net.URI(trimmed).host }.getOrNull()
                 addSubscription(host ?: "Clipboard sub", trimmed)
-                viewModelScope.launch { _events.emit(Event.ClipboardSub) }
             }
             isConfigLink -> importFromLink(trimmed)
             // multi-line pastes: try to parse every line as config links
@@ -169,16 +172,28 @@ class MyConfigViewModel @Inject constructor(
     fun importFile() { /* file picker handled by screen; result -> importFromLink */ }
 
     fun addSubscription(name: String, url: String) = viewModelScope.launch {
-        if (url.startsWith("http")) subUseCase.add(name, url)
+        if (url.startsWith("http")) {
+            subUseCase.add(name, url)
+            _events.emit(Event.SubAdded)
+        }
     }
 
     /** QR scan on a subscription link: name it from the host, fetch immediately. */
     fun addSubscriptionFromQr(url: String) = viewModelScope.launch {
         val host = runCatching { java.net.URI(url).host }.getOrNull() ?: "QR sub"
         subUseCase.add(host, url)
+        _events.emit(Event.SubAdded)
     }
 
-    fun refreshSubscription(id: Long) = viewModelScope.launch { subUseCase.refresh(id) }
+    // subscriptions whose refresh is currently running (drives the spinner on the update button)
+    private val _updatingSubIds = kotlinx.coroutines.flow.MutableStateFlow<Set<Long>>(emptySet())
+    val updatingSubIds = _updatingSubIds.asStateFlow()
+
+    fun refreshSubscription(id: Long) = viewModelScope.launch {
+        _updatingSubIds.value = _updatingSubIds.value + id
+        val ok = try { subUseCase.refresh(id).isSuccess } finally { _updatingSubIds.value = _updatingSubIds.value - id }
+        if (ok) _events.emit(Event.SubUpdated) else _events.emit(Event.SubUpdateFailed)
+    }
 
     /** pin / unpin from the three-dot menu */
     fun setSubPinned(id: Long, pinned: Boolean) = viewModelScope.launch { subUseCase.setPinned(id, pinned) }
