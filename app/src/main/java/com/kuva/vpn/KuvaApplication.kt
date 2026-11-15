@@ -32,6 +32,7 @@ class KuvaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        installCrashHandler()
         // Every fresh process start (user pressed Exit, swiped the app away,
         // or the system killed it in the background) wipes stored ping/speed
         // numbers — old measurements must not be presented as current.
@@ -64,18 +65,63 @@ class KuvaApplication : Application() {
         // One-time asset prep (geoip/geosite) is done lazily by XrayCoreManager.initCoreEnv
     }
 
+    /**
+     * Persists uncaught exceptions to files/crash/ so the bug-report zip can
+     * carry them along. The previous handler still runs afterwards, so the
+     * system crash flow (dialog, process death) behaves exactly as before.
+     * Keeps only the 5 newest files.
+     */
+    private fun installCrashHandler() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+            runCatching {
+                val dir = java.io.File(filesDir, "crash").apply { mkdirs() }
+                val stamp = java.text.SimpleDateFormat(
+                    "yyyy-MM-dd_HH-mm-ss", java.util.Locale.US
+                ).format(java.util.Date())
+                java.io.File(dir, "crash_$stamp.txt").writeText(
+                    buildString {
+                        appendLine("time: $stamp")
+                        appendLine("thread: " + thread.name)
+                        appendLine("app: " + packageName + " v" + BuildConfig.VERSION_NAME)
+                        appendLine(
+                            "device: " + android.os.Build.MANUFACTURER + " " +
+                                android.os.Build.MODEL + " (Android " +
+                                android.os.Build.VERSION.RELEASE + ", SDK " +
+                                android.os.Build.VERSION.SDK_INT + ")"
+                        )
+                        appendLine()
+                        appendLine(android.util.Log.getStackTraceString(e))
+                    }
+                )
+                dir.listFiles()
+                    ?.sortedByDescending { it.name }
+                    ?.drop(5)
+                    ?.forEach { it.delete() }
+            }
+            previous?.uncaughtException(thread, e)
+        }
+    }
+
     companion object {
         @Volatile lateinit var instance: KuvaApplication
             private set
 
         fun applyTheme(mode: String) {
-            AppCompatDelegate.setDefaultNightMode(
-                when (mode) {
-                    "light" -> AppCompatDelegate.MODE_NIGHT_YES  // light palette removed — dark only
-                    "dark" -> AppCompatDelegate.MODE_NIGHT_YES
-                    else -> AppCompatDelegate.MODE_NIGHT_YES
-                }
-            )
+            // setDefaultNightMode ends up calling Activity.recreate(), which
+            // must run on the main thread. Callers fire this from coroutine
+            // workers (Application onCreate, SettingsViewModel) and that
+            // crashed with "Must be called from main thread" — posting to
+            // the main looper makes it safe from any thread.
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                AppCompatDelegate.setDefaultNightMode(
+                    when (mode) {
+                        "light" -> AppCompatDelegate.MODE_NIGHT_YES  // light palette removed — dark only
+                        "dark" -> AppCompatDelegate.MODE_NIGHT_YES
+                        else -> AppCompatDelegate.MODE_NIGHT_YES
+                    }
+                )
+            }
         }
     }
 }

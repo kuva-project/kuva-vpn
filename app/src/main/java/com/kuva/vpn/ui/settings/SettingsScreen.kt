@@ -1053,6 +1053,14 @@ private fun buildAndShareBugReport(context: android.content.Context): Boolean {
                 ?.let { put("swift.log", it.readText()) }
             File(context.cacheDir, "logs/xray.log").takeIf { it.exists() }
                 ?.let { put("xray.log", it.readText()) }
+            // persisted uncaught-exception logs (written by the crash handler
+            // in KuvaApplication) — newest first, max 3 files
+            File(context.filesDir, "crash").listFiles()
+                ?.sortedByDescending { it.name }
+                ?.take(3)
+                ?.forEach { f ->
+                    runCatching { put("crashes/" + f.name, f.readText()) }
+                }
         }
         val uri = androidx.core.content.FileProvider.getUriForFile(
             context, context.packageName + ".fileprovider", out

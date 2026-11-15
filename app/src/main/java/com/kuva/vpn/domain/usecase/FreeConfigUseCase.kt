@@ -240,7 +240,10 @@ class FreeConfigUseCase @Inject constructor(
         // Results are persisted in ~1-second batches, not one UPDATE per
         // ping: each UPDATE re-fired the list Flow and made scrolling lag
         // badly during search/ping runs.
-        val pending = LinkedHashMap<Long, Int>()
+        // Parallel pings invoke this callback from several worker threads;
+        // a plain LinkedHashMap threw ConcurrentModificationException when
+        // toList() raced with a put() from another thread (seen on main).
+        val pending = java.util.concurrent.ConcurrentHashMap<Long, Int>()
         var aliveCount = 0
         var deadCount = 0
         var lastCommit = 0L

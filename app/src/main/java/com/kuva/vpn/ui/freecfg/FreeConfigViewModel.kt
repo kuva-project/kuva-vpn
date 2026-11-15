@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -22,6 +23,8 @@ class FreeConfigViewModel @Inject constructor(
     private val freeUseCase: FreeConfigUseCase,
     private val connRepo: com.kuva.vpn.domain.repository.ConnectionRepository,
     private val tester: com.kuva.vpn.core.diagnostics.ConfigTester,
+    private val settingsRepo: com.kuva.vpn.data.settings.SettingsRepository,
+    private val vpnControl: com.kuva.vpn.core.control.VpnControl,
 ) : ViewModel() {
 
     /** raw tunnel state; screens resolve the connected profile by name */
@@ -150,6 +153,31 @@ class FreeConfigViewModel @Inject constructor(
     fun clearResults() = viewModelScope.launch { freeUseCase.clearSearchResults() }
 
     fun select(id: Long) = viewModelScope.launch { repo.select(id) }
+
+    /** double-tap on a row: select + connect, staying on this screen. If the
+     *  engine is Swift, quietly switch to Xray first (configs only run on
+     *  Xray) and stop any live tunnel before starting. */
+    fun connect(id: Long) = viewModelScope.launch {
+        repo.select(id)
+        if (settingsRepo.settings.first().engineMode == "swift") {
+            settingsRepo.setEngineMode("xray")
+            when (connRepo.state.value) {
+                is com.kuva.vpn.domain.model.ConnectionState.Connected,
+                is com.kuva.vpn.domain.model.ConnectionState.Connecting,
+                is com.kuva.vpn.domain.model.ConnectionState.SwiftConnecting -> {
+                    vpnControl.requestStop(app())
+                    kotlinx.coroutines.delay(1200)   // let the service tear down
+                }
+                else -> Unit
+            }
+        }
+        vpnControl.requestStart(app())
+    }
+
+    /** double-tap on the connected row itself = disconnect (same as the power button) */
+    fun requestDisconnect() = vpnControl.requestStop(app())
+
+    private fun app() = com.kuva.vpn.KuvaApplication.instance!!
     /** ids whose speed test is currently running (screen shows a spinner) */
     val testingSpeed = kotlinx.coroutines.flow.MutableStateFlow<Set<Long>>(emptySet())
 

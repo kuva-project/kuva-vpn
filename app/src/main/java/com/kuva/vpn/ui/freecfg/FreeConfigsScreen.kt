@@ -2,6 +2,7 @@ package com.kuva.vpn.ui.freecfg
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Image
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.draw.drawBehind
@@ -420,6 +421,10 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                             testing = p.id in testingSpeed,
                             pinging = p.id in singlePinging,
                             onClick = { viewModel.select(p.id) },
+                            onDoubleClick = {
+                                if (p.id == connectedId) viewModel.requestDisconnect()
+                                else viewModel.connect(p.id)
+                            },
                             onDelete = { viewModel.delete(p.id) },
                             onTestSpeed = { viewModel.testSpeed(p.id) },
                             onFavorite = { viewModel.toggleFavorite(p.id, !p.isFavorite) },
@@ -655,10 +660,12 @@ fun ProtocolRibbon(protocol: String) {
 }
 
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 fun ConfigRow(
     profile: Profile,
     selected: Boolean,
     onClick: () -> Unit,
+    onDoubleClick: () -> Unit = {},   // double-tap: select + connect (or disconnect if already on it)
     onDelete: () -> Unit,
     onTestSpeed: () -> Unit,
     onFavorite: () -> Unit,
@@ -681,7 +688,10 @@ fun ConfigRow(
         else -> null
     }
     Card(
-        onClick = onClick,
+        modifier = Modifier.combinedClickable(
+            onClick = onClick,
+            onDoubleClick = onDoubleClick,
+        ),
         colors = CardDefaults.cardColors(
             containerColor = if (selected || connected) Color.White.copy(alpha = 0.22f)
             else Color.White.copy(alpha = 0.10f)

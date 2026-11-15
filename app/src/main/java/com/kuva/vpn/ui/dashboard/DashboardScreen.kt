@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -111,6 +112,31 @@ fun DashboardScreen(
     // back on the dashboard opens the exit popup: Exit / Keep in background / Cancel
     var showExitDialog by remember { mutableStateOf(false) }
     var showPsiphonCountrySheet by remember { mutableStateOf(false) }
+
+    // compact header status: while the big power button has scrolled out of
+    // view (>80% of its height hidden), the header shows a small colored dot
+    // + state text under "KUVA VPN"; when the button is visible, nothing is
+    // shown (user request 2026-11-15)
+    val dashScrollState = rememberScrollState()
+    var powerButtonHeightPx by remember { mutableStateOf(0) }
+    val powerButtonVisible = dashScrollState.value < (powerButtonHeightPx * 0.8f).toInt()
+    val headerStateColor = when (state) {
+        is ConnectionState.Connected -> StatusGreen
+        is ConnectionState.Connecting -> StatusOrange
+        is ConnectionState.SwiftConnecting -> StatusOrange
+        is ConnectionState.Error -> StatusRed
+        else -> StatusGray
+    }
+    val headerStateText = stringResource(
+        when (state) {
+            is ConnectionState.Connected -> R.string.state_connected
+            is ConnectionState.Connecting -> R.string.state_connecting
+            is ConnectionState.SwiftConnecting -> R.string.state_swift_scanning
+            is ConnectionState.Disconnecting -> R.string.state_disconnecting
+            is ConnectionState.Error -> R.string.state_error
+            else -> R.string.state_disconnected
+        }
+    )
 
     val exitContext = androidx.compose.ui.platform.LocalContext.current
 
@@ -316,12 +342,33 @@ fun DashboardScreen(
                 contentScale = ContentScale.Fit,
             )
             Spacer(Modifier.size(2.dp))
-            Text(
-                "KUVA VPN",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = GoldLight,
-            )
+            Column {
+                Text(
+                    "KUVA VPN",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldLight,
+                )
+                // status chip: appears only while the power button is scrolled
+                // away — colored dot + state text, same palette as the button
+                androidx.compose.animation.AnimatedVisibility(visible = !powerButtonVisible) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(9.dp)
+                                .clip(CircleShape)
+                                .background(headerStateColor)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            headerStateText,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = headerStateColor,
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.weight(1f))
             // StatusPill removed from the header: the connected/disconnected
             // state was suspected of shifting the language icon size; the
@@ -372,11 +419,14 @@ fun DashboardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(dashScrollState),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
         // ---------- power button ----------
-        PowerButton(state = state, onClick = viewModel::toggle)
+        // measured so the header chip knows when the button has left view
+        Box(modifier = Modifier.onSizeChanged { powerButtonHeightPx = it.height }) {
+            PowerButton(state = state, onClick = viewModel::toggle)
+        }
 
         Spacer(Modifier.height(16.dp))
         Text(

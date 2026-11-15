@@ -2,16 +2,57 @@
 
 All notable changes to KUVAVpn are documented here.
 
+## v1.2.2 — 2026-11-15
+
+### Added
+- **Double-tap to connect**: one tap on a config row selects it, a double
+  tap selects AND connects — no more going back to the home screen to press
+  the power button (My Configs + free vault). Double-tapping the connected
+  row itself disconnects. If the engine is set to Kuva Swift, a double tap
+  quietly switches to Xray first (configs only run on Xray), stops any live
+  tunnel and connects to the tapped config — the screen stays where it is.
+- **Compact header status**: when the big power button is scrolled more than
+  80% out of view, a small colored dot + state text appears under the
+  "KUVA VPN" title (green = connected, orange = connecting/scanning, red =
+  error, gray = disconnected). It fades away again as soon as the button is
+  back in view — nothing is shown when the button is visible.
+
+### Fixed
+- **App crashes on theme/language change** (`IllegalStateException: Must be
+  called from main thread`, ~34 reported instances): applying the night mode
+  from a background coroutine now posts to the main looper.
+- **ConcurrentModificationException during group ping** in the free vault:
+  the pending-results map is now a ConcurrentHashMap, safe for parallel pings.
+- **Cancel a Swift connection attempt**: a second tap on the connect button
+  while the Swift handshake/scan is running (up to ~2 minutes) now cancels
+  the attempt instead of queueing another start; the connecting coroutine
+  exits silently and never overwrites the Disconnected state with a stale
+  error afterwards.
+- **In-app crash reports**: uncaught exceptions are written to
+  `files/crash/` (newest 5 kept) and the newest 3 ride along inside the
+  bug-report zip under `crashes/` — future reports are self-sufficient,
+  no adb needed.
+
 ## v1.2.1 — 2026-11-15
 
 ### Added
 - **Colored status banners** at the bottom of the config screens: green for
   success (configs added, subscription added/updated), yellow for failures
   (subscription update failed), each with a fitting icon and auto-fit width.
+- **Protocol ribbons** on config rows: a colored side badge per protocol
+  (VLESS blue, VMess purple, …) so configs are recognizable at a glance.
+- **Redesigned search** in the free vault and My Configs (neon-purple field,
+  cleaner results layout).
+- **Language quick-switch icons (EN/FA)** in Settings.
 - A **spinner on the subscription refresh button** while the update is running
   (the button can't be double-tapped anymore).
+- Adding a subscription by dialog, QR or clipboard now shows a green
+  **"Sub added"** confirmation.
 
 ### Fixed
+- **Psiphon on armeabi-v7a devices**: the bundled Psiphon core (`libpt.so`)
+  for 32-bit ARM was replaced with a working build — Kuva Swift + Psiphon now
+  connects on older phones. The x86_64 core was refreshed as well.
 - **Undo banner now actually appears** after deleting a config or a
   subscription (in both My Configs and the free-vault screen) — a lifecycle
   gate evaluated once at composition kept the undo listener from ever starting.
@@ -19,8 +60,10 @@ All notable changes to KUVAVpn are documented here.
   **Undo** action), 25% narrower than the colored ones, and auto-dismisses
   after **4 s** for a single config / **6 s** for a whole subscription —
   after that the deletion becomes permanent.
-- Adding a subscription by dialog, QR or clipboard now shows the same green
-  **"Sub added"** confirmation with correct wording.
+- Free-config discovery: more reliable source fetching and fingerprint
+  deduplication (fewer duplicates, fewer failed imports).
+- Notification and live-traffic-stats stability fixes.
+- General dashboard / settings UI polish and theme tweaks.
 
 ## v1.2.0 — 2026-11-13
 

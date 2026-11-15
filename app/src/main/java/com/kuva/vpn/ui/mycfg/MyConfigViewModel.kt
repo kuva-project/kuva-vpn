@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import com.kuva.vpn.core.diagnostics.ConfigTester
@@ -26,6 +27,7 @@ class MyConfigViewModel @Inject constructor(
     private val connRepo: com.kuva.vpn.domain.repository.ConnectionRepository,
     private val tester: com.kuva.vpn.core.diagnostics.ConfigTester,
     private val settingsRepo: com.kuva.vpn.data.settings.SettingsRepository,
+    private val vpnControl: com.kuva.vpn.core.control.VpnControl,
 ) : ViewModel() {
 
     /** current settings snapshot flow (used by config JSON export) */
@@ -205,6 +207,31 @@ class MyConfigViewModel @Inject constructor(
     }
 
     fun select(id: Long) = viewModelScope.launch { repo.select(id) }
+
+    /** double-tap on a row: select + connect, staying on this screen. If the
+     *  engine is Swift, quietly switch to Xray first (subscription/manual
+     *  configs only run on Xray) and stop any live tunnel before starting. */
+    fun connect(id: Long) = viewModelScope.launch {
+        repo.select(id)
+        if (settingsRepo.settings.first().engineMode == "swift") {
+            settingsRepo.setEngineMode("xray")
+            when (connRepo.state.value) {
+                is com.kuva.vpn.domain.model.ConnectionState.Connected,
+                is com.kuva.vpn.domain.model.ConnectionState.Connecting,
+                is com.kuva.vpn.domain.model.ConnectionState.SwiftConnecting -> {
+                    vpnControl.requestStop(app())
+                    kotlinx.coroutines.delay(1200)   // let the service tear down
+                }
+                else -> Unit
+            }
+        }
+        vpnControl.requestStart(app())
+    }
+
+    /** double-tap on the connected row itself = disconnect (same as the power button) */
+    fun requestDisconnect() = vpnControl.requestStop(app())
+
+    private fun app() = com.kuva.vpn.KuvaApplication.instance!!
 
     /** delete one personal config with undo support */
     fun delete(id: Long) = viewModelScope.launch {

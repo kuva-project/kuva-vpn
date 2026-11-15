@@ -392,14 +392,19 @@ class KuvaVpnService : VpnService() {
         // state with live progress so the user sees movement, not a hang
         connectionRepo.setState(ConnectionState.SwiftConnecting(profile.name, 0))
         var lastRealPct = 0
+        // guarded: after the user cancels (second tap on the connect button)
+        // the core may still emit a few log lines while dying — those must
+        // not flip the freshly-set Disconnected state back to SwiftConnecting
         swift.onProgress = { pct ->
             lastRealPct = pct
-            connectionRepo.setState(ConnectionState.SwiftConnecting(profile.name, pct))
+            if (!userDisconnected && !switching)
+                connectionRepo.setState(ConnectionState.SwiftConnecting(profile.name, pct))
         }
         // Stage labels ride with the same real events that drive the bar;
         // the UI resolves the key via stringResource (fa + en).
         swift.onStage = { _, stageKey ->
-            connectionRepo.setSwiftStage(stageKey)
+            if (!userDisconnected && !switching)
+                connectionRepo.setSwiftStage(stageKey)
         }
         // Psiphon mode: the core prints "psiphon through the tunnel exit: ..."
         // only when psiphon is actually carrying traffic (~20-40 s after the
@@ -413,6 +418,12 @@ class KuvaVpnService : VpnService() {
 
         // first start includes endpoint discovery; give it a generous window
         if (!swift.awaitSocksReady(s.socksPort, 60_000)) {
+            if (userDisconnected || switching) {
+                // cancelled while waiting — disconnect() already cleaned up
+                swift.onProgress = null
+                swift.onStage = null
+                return
+            }
             swift.onProgress = null
             swift.onStage = null
             connectionRepo.setState(ConnectionState.Error("swift core did not come up"))
@@ -447,6 +458,14 @@ class KuvaVpnService : VpnService() {
         // keep the original 30 s fallback.
         val holdMs = if (s.swiftPsiphon) 90_000L else 30_000L
         while (true) {
+            // user tapped the connect button again during the (up to ~2 min)
+            // handshake/scan: disconnect() already tore everything down and
+            // set Disconnected — exit silently instead of reporting an Error
+            if (userDisconnected || switching) {
+                swift.onProgress = null
+                swift.onStage = null
+                return
+            }
             if (!swift.isRunning()) {
                 swift.onProgress = null
             swift.onStage = null

@@ -41,7 +41,11 @@ class VpnControl @Inject constructor(
     fun toggle(context: Context) {
         when (connRepo.state.value) {
             is ConnectionState.Connected,
-            is ConnectionState.Connecting -> requestStop(context)
+            is ConnectionState.Connecting,
+            // a second tap while the Swift handshake/scanning is still running
+            // (it can take up to ~2 minutes) must CANCEL the attempt, not
+            // queue another start on top of it
+            is ConnectionState.SwiftConnecting -> requestStop(context)
             else -> requestStart(context)
         }
     }

@@ -303,6 +303,8 @@ fun MyConfigsScreen(
                     pingingAll = sectionPinging == -1L,
                     rowPinging = singlePinging,
                     onSelect = { viewModel.select(it) },
+                    onConnect = { viewModel.connect(it) },
+                    onDisconnect = { viewModel.requestDisconnect() },
                     onDelete = { viewModel.delete(it) },
                     onTestSpeed = { viewModel.testSpeed(it) },
                     onFavorite = { id, fav -> viewModel.toggleFavorite(id, fav) },
@@ -323,6 +325,8 @@ fun MyConfigsScreen(
                     pingingSub = sectionPinging == sub.id,
                     rowPinging = singlePinging,
                     onSelect = { viewModel.select(it) },
+                    onConnect = { viewModel.connect(it) },
+                    onDisconnect = { viewModel.requestDisconnect() },
                     onDelete = { viewModel.delete(it) },
                     onTestSpeed = { viewModel.testSpeed(it) },
                     onFavorite = { id, fav -> viewModel.toggleFavorite(id, fav) },
@@ -403,6 +407,8 @@ private fun SubscriptionSection(
     pingingSub: Boolean = false,        // batch ping of THIS subscription is running
     rowPinging: Set<Long> = emptySet(), // rows running a single swipe ping
     onSelect: (Long) -> Unit,
+    onConnect: (Long) -> Unit = {},     // double-tap: select + connect
+    onDisconnect: () -> Unit = {},      // double-tap on the connected row
     onDelete: (Long) -> Unit,
     onTestSpeed: (Long) -> Unit,
     onFavorite: (Long, Boolean) -> Unit,
@@ -644,6 +650,9 @@ private fun SubscriptionSection(
                     selected = p.id == selectedId,
                     connected = p.id == connectedId,
                     onClick = { onSelect(p.id) },
+                    onDoubleClick = {
+                        if (p.id == connectedId) onDisconnect() else onConnect(p.id)
+                    },
                     onDelete = { onDelete(p.id) },
                     onTestSpeed = { onTestSpeed(p.id) },
                     onFavorite = { onFavorite(p.id, !p.isFavorite) },
@@ -668,6 +677,8 @@ private fun ManualSection(
     pingingAll: Boolean = false,        // batch ping of the manual section is running
     rowPinging: Set<Long> = emptySet(), // rows running a single swipe ping
     onSelect: (Long) -> Unit,
+    onConnect: (Long) -> Unit = {},     // double-tap: select + connect
+    onDisconnect: () -> Unit = {},      // double-tap on the connected row
     onDelete: (Long) -> Unit,
     onTestSpeed: (Long) -> Unit,
     onFavorite: (Long, Boolean) -> Unit,
@@ -762,6 +773,9 @@ private fun ManualSection(
                     selected = p.id == selectedId,
                     connected = p.id == connectedId,
                     onClick = { onSelect(p.id) },
+                    onDoubleClick = {
+                        if (p.id == connectedId) onDisconnect() else onConnect(p.id)
+                    },
                     onDelete = { onDelete(p.id) },
                     onTestSpeed = { onTestSpeed(p.id) },
                     onFavorite = { onFavorite(p.id, !p.isFavorite) },
