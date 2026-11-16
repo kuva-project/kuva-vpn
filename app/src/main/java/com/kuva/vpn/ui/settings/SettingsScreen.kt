@@ -76,6 +76,11 @@ import com.kuva.vpn.R
 import com.kuva.vpn.data.settings.RoutingMode
 import com.kuva.vpn.ui.apps.AppPickerScreen
 import java.io.File
+import com.kuva.vpn.ui.theme.NeonPurple
+import com.kuva.vpn.ui.theme.PurpleGradientEnd
+import com.kuva.vpn.ui.theme.StatusRed
+import com.kuva.vpn.ui.theme.NeonPurpleLight
+import com.kuva.vpn.ui.theme.NeonPurpleSoft
 
 /**
  * Settings, redesigned as grouped cards (appearance, split tunneling, DNS,
@@ -140,10 +145,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                             containerColor = Color.Transparent,
                             labelColor = Color.White.copy(alpha = 0.75f),
                             selectedContainerColor = Color.Transparent,
-                            selectedLabelColor = Color(0xFFB026FF),
+                            selectedLabelColor = NeonPurple,
                         ),
                         border = if (s.engineMode == m)
-                            BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))))
+                            BorderStroke(1.5.dp, Brush.linearGradient(listOf(NeonPurple, PurpleGradientEnd)))
                         else BorderStroke(1.5.dp, Color.White.copy(alpha = 0.15f)),
                         label = {
                             Text(
@@ -212,10 +217,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                             containerColor = Color.Transparent,
                             labelColor = Color.White.copy(alpha = 0.75f),
                             selectedContainerColor = Color.Transparent,
-                            selectedLabelColor = Color(0xFFB026FF),
+                            selectedLabelColor = NeonPurple,
                         ),
                         border = if (s.dnsProvider == p)
-                            BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))))
+                            BorderStroke(1.5.dp, Brush.linearGradient(listOf(NeonPurple, PurpleGradientEnd)))
                         else BorderStroke(1.5.dp, Color.White.copy(alpha = 0.15f)),
                         label = { Text(p.replaceFirstChar { it.uppercase() }) },
                     )
@@ -462,11 +467,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         // ---------- danger zone ----------
         Spacer(Modifier.height(16.dp))
         TextButton(onClick = { showResetConfirm = true }) {
-            Text(stringResource(R.string.reset_settings), color = Color(0xFFFF1744),
+            Text(stringResource(R.string.reset_settings), color = StatusRed,
                 fontSize = 17.sp)
         }
         TextButton(onClick = viewModel::clearCache) {
-            Text(stringResource(R.string.clear_cache), color = Color(0xFFFF1744),
+            Text(stringResource(R.string.clear_cache), color = StatusRed,
                 fontSize = 17.sp)
         }
         Spacer(Modifier.height(32.dp))
@@ -719,7 +724,7 @@ private fun LogActionButton(
             icon,
             contentDescription = contentDescription,
             modifier = Modifier.size(24.dp),
-            tint = Color(0xFFE0B0FF),  // light neon purple accent
+            tint = NeonPurpleLight,  // light neon purple accent
         )
     }
 }
@@ -851,7 +856,7 @@ private fun SectionCard(
         targetValue = if (expanded) 0f else if (rtl) 90f else -90f,
         animationSpec = tween(200),
     )
-    val titleColor = Color(0xFFD08FFF)   // lighter neon purple accent
+    val titleColor = NeonPurpleSoft   // lighter neon purple accent
     Spacer(Modifier.height(16.dp))
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -903,11 +908,11 @@ private fun ModeOption(
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) Color(0xFFB026FF).copy(alpha = 0.18f)
+            containerColor = if (selected) NeonPurple.copy(alpha = 0.18f)
             else Color.White.copy(alpha = 0.06f),
         ),
         border = if (selected)
-            BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))))
+            BorderStroke(1.5.dp, Brush.linearGradient(listOf(NeonPurple, PurpleGradientEnd)))
         else null,
         shape = RoundedCornerShape(14.dp),
     ) {
@@ -971,9 +976,9 @@ private fun SwitchRow(
             onCheckedChange = if (enabled) onChange else null,
             enabled = enabled,
             colors = SwitchDefaults.colors(
-                checkedTrackColor = Color(0xFFB026FF),   // neon purple
+                checkedTrackColor = NeonPurple,   // neon purple
                 checkedThumbColor = Color(0xFF101010),
-                checkedBorderColor = Color(0xFFB026FF),
+                checkedBorderColor = NeonPurple,
             ),
         )
     }

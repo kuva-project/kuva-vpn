@@ -51,6 +51,15 @@ import com.kuva.vpn.ui.freecfg.ActionIconLarge
 import com.kuva.vpn.ui.freecfg.ConfigRow
 import com.kuva.vpn.ui.freecfg.SwipeBothWaysRow
 import com.kuva.vpn.util.Formatters
+import com.kuva.vpn.ui.theme.PurpleGradientEnd
+import com.kuva.vpn.ui.theme.AccentBlue
+import com.kuva.vpn.ui.theme.OveruseYellow
+import com.kuva.vpn.ui.theme.OveruseAmber
+import com.kuva.vpn.ui.theme.SuccessGreen
+import com.kuva.vpn.ui.theme.SuccessGreenDeep
+import com.kuva.vpn.ui.theme.WarnYellow
+import com.kuva.vpn.ui.theme.WarnAmber
+import com.kuva.vpn.ui.theme.DangerLight
 
 /**
  * Personal configurations + subscriptions. Fully isolated from the free repo.
@@ -220,7 +229,7 @@ fun MyConfigsScreen(
                     containerColor = Color.Transparent,
                     contentColor = NeonPurple,
                 ),
-                border = BorderStroke(2.dp, Brush.linearGradient(listOf(NeonPurple, Color(0xFF7C4DFF)))),
+                border = BorderStroke(2.dp, Brush.linearGradient(listOf(NeonPurple, PurpleGradientEnd))),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -245,7 +254,7 @@ fun MyConfigsScreen(
                     containerColor = Color.Transparent,
                     contentColor = NeonPurple,
                 ),
-                border = BorderStroke(2.dp, Brush.linearGradient(listOf(NeonPurple, Color(0xFF7C4DFF)))),
+                border = BorderStroke(2.dp, Brush.linearGradient(listOf(NeonPurple, PurpleGradientEnd))),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
             ) {
                 Icon(Icons.Filled.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -260,7 +269,7 @@ fun MyConfigsScreen(
                     containerColor = Color.Transparent,
                     contentColor = NeonPurple,
                 ),
-                border = BorderStroke(2.dp, Brush.linearGradient(listOf(NeonPurple, Color(0xFF7C4DFF)))),
+                border = BorderStroke(2.dp, Brush.linearGradient(listOf(NeonPurple, PurpleGradientEnd))),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
             ) {
                 Icon(Icons.Filled.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -397,6 +406,19 @@ fun MyConfigsScreen(
 
 // ---------------------------------------------------------------- subscription
 
+/**
+ * Bidi helper: values that are pure Latin ("222 ms", "191.5 KB / 5 GB",
+ * "ger.example.ir:2083") get a forced LTR text direction; strings containing
+ * Persian letters get an explicit RTL base direction — Unspecified inherits
+ * the surrounding container's direction, and the sub cards render inside an
+ * LTR-locked container, which mirrored mixed strings ("44 config",
+ * "traffic: ... GB (unlimited)") and dropped the infinity glyph.
+ */
+private fun latinDir(v: String): androidx.compose.ui.text.style.TextDirection =
+    if (v.none { c -> c in '\u0590'..'\u08FF' })
+        androidx.compose.ui.text.style.TextDirection.Ltr
+    else androidx.compose.ui.text.style.TextDirection.Rtl
+
 @Composable
 private fun SubscriptionSection(
     sub: SubscriptionEntity,
@@ -445,7 +467,7 @@ private fun SubscriptionSection(
                     .padding(vertical = 6.dp, horizontal = 0.dp)
                     .width(3.dp)
                     .background(
-                        Brush.verticalGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))),
+                        Brush.verticalGradient(listOf(NeonPurple, PurpleGradientEnd)),
                         RoundedCornerShape(2.dp)
                     )
             )
@@ -481,7 +503,8 @@ private fun SubscriptionSection(
                         }
                     }
                     Text(stringResource(R.string.sub_count, owned.size),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            textDirection = latinDir(stringResource(R.string.sub_count, owned.size))),
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 // ping all configs of this sub (spinner while the batch runs)
@@ -552,7 +575,8 @@ private fun SubscriptionSection(
                 } else {
                     "${Formatters.bytes(used)} / ${Formatters.bytes(sub.totalBytes)}"
                 }
-                Text(traffic, style = MaterialTheme.typography.labelSmall,
+                Text(traffic, style = MaterialTheme.typography.labelSmall.copy(
+                        textDirection = latinDir(traffic)),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 // usage bar only when the subscription reports a real quota —
                 // infinite subs keep the plain text (no misleading bar);
@@ -574,9 +598,9 @@ private fun SubscriptionSection(
                                 .fillMaxWidth(frac)
                                 .background(
                                     if (frac >= 0.9f)
-                                        Brush.horizontalGradient(listOf(Color(0xFFFFEA00), Color(0xFFFFC400)))
+                                        Brush.horizontalGradient(listOf(OveruseYellow, OveruseAmber))
                                     else
-                                        Brush.horizontalGradient(listOf(Color(0xFFB026FF), Color(0xFF00E5FF))),
+                                        Brush.horizontalGradient(listOf(NeonPurple, AccentBlue)),
                                     RoundedCornerShape(50)
                                 )
                         )
@@ -603,13 +627,14 @@ private fun SubscriptionSection(
                 // label and value as TWO Texts in one Row — the bidi
                 // algorithm can no longer push the infinity glyph to
                 // its own line in Persian
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.sub_expiry_label_only),
-                        style = MaterialTheme.typography.labelSmall, softWrap = false, color = expColor)
-                    Spacer(Modifier.width(4.dp))
-                    Text(expText,
-                        style = MaterialTheme.typography.labelSmall, softWrap = false, color = expColor)
-                }
+                // label + value as ONE Text with maxLines=1 — the two-Text
+                // Row still wrapped to two lines on some devices (MIUI font
+                // scale); a single non-wrapping Text can never break
+                val expFull = stringResource(R.string.sub_expiry_label_only) + " " + expText
+                Text(expFull,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        textDirection = latinDir(expFull)),
+                    maxLines = 1, softWrap = false, color = expColor)
                 sub.lastError?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                 }
@@ -708,7 +733,7 @@ private fun ManualSection(
                     .padding(vertical = 6.dp, horizontal = 0.dp)
                     .width(3.dp)
                     .background(
-                        Brush.verticalGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))),
+                        Brush.verticalGradient(listOf(NeonPurple, PurpleGradientEnd)),
                         RoundedCornerShape(2.dp)
                     )
             )
@@ -741,7 +766,8 @@ private fun ManualSection(
                     }
                 }
                 Text(stringResource(R.string.sub_count, profiles.size),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        textDirection = latinDir(stringResource(R.string.sub_count, profiles.size))),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             // ping all manual configs (spinner while the batch runs)
@@ -910,7 +936,7 @@ private fun StatusSnackbarHost(
             ) {
                 Text(
                     "\u2715",
-                    color = Color(0xFFFF5252),
+                    color = DangerLight,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                 )
@@ -927,7 +953,7 @@ private fun StatusSnackbarHost(
                 ) {
                     Text(
                         data.visuals.actionLabel ?: "",
-                        color = Color(0xFFB026FF),
+                        color = NeonPurple,
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -944,8 +970,8 @@ private fun StatusSnackbarHost(
                     // banner hugs its text instead of stretching full width
                     .widthIn(max = 420.dp)
                     .background(
-                        if (ok) Brush.horizontalGradient(listOf(Color(0xFF00E676), Color(0xFF00C853)))
-                        else Brush.horizontalGradient(listOf(Color(0xFFFFEB3B), Color(0xFFFFC107))),
+                        if (ok) Brush.horizontalGradient(listOf(SuccessGreen, SuccessGreenDeep))
+                        else Brush.horizontalGradient(listOf(WarnYellow, WarnAmber)),
                         RoundedCornerShape(12.dp),
                     )
                     .padding(horizontal = 14.dp, vertical = 10.dp),

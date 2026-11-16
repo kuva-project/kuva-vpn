@@ -30,9 +30,38 @@ val StatusOrange = Color(0xFFFFC800)  // connecting state: original matte yellow
 val StatusRed = Color(0xFFFF1744)
 val StatusGray = Color(0xFF9E9E9E)   // idle/disconnected state color
 
+// ---- Shared accents (theme tokens: screens must import these instead of
+// hard-coding hex values, so adding new themes later only touches Theme.kt) ----
+val AccentBlue = Color(0xFF00E5FF)       // engine switch + usage bar blue (was 0xFF33CCFF on dashboard)
+val PurpleGradientEnd = Color(0xFF7C4DFF) // second stop of every purple gradient
+val VlessBlue = Color(0xFF2979FF)        // VLESS protocol badge
+val TrojanOrange = Color(0xFFFF6D3B)     // TROJAN protocol badge
+val TrojanOrangeLight = Color(0xFFFFAB40)
+val SsGreen = Color(0xFF2ECC71)          // SHADOWSOCKS protocol badge
+val WarnYellow = Color(0xFFFFEB3B)       // update-failed / warning gradient start
+val WarnAmber = Color(0xFFFFC107)        // update-failed / warning gradient end
+val DangerLight = Color(0xFFFF5252)      // destructive gradient end / hover red
+val OveruseYellow = Color(0xFFFFEA00)    // usage bar >90% start
+val OveruseAmber = Color(0xFFFFC400)     // usage bar >90% end
+val SuccessGreen = Color(0xFF00E676)     // snackbar "ok" gradient start
+val SuccessGreenDeep = Color(0xFF00C853) // snackbar "ok" gradient end
+val NeonPurpleSoft = Color(0xFFD08FFF)   // card titles / M3 primary
+
+/**
+ * One ping color scale for EVERY screen (vault rows, search rows, MyConfigs
+ * rows via the shared ConfigRow): untested gray, dead red,
+ * green <=200 ms, yellow 200-450 ms, red >450 ms.
+ */
+fun pingColor(pingMs: Int?): Color = when {
+    pingMs == null -> StatusGray          // never tested
+    pingMs < 0 -> StatusRed               // dead / timed out
+    pingMs <= 200 -> StatusGreen          // fast
+    pingMs <= 450 -> StatusOrange         // usable
+    else -> StatusRed                     // slow
+}
+
 private val DarkColors = darkColorScheme(
-    // matches the Settings screen card-title purple (0xFFD08FFF)
-    primary = Color(0xFFD08FFF),
+    primary = NeonPurpleSoft,
     onPrimary = Color(0xFF1A0526),   // dark text on the light-purple fill
     primaryContainer = NeonPurpleDeep,
     onPrimaryContainer = NeonPurpleLight,

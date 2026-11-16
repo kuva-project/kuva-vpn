@@ -25,3 +25,7 @@ keystore.properties
 *.log
 captures/
 build_log.txt
+release_log.txt
+build_log.txt
+Kuva Patch*.zip
+mapping-*.txt

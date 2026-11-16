@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -55,6 +56,19 @@ import com.kuva.vpn.R
 import com.kuva.vpn.domain.model.Profile
 import com.kuva.vpn.util.Formatters
 import kotlin.math.roundToInt
+import com.kuva.vpn.ui.theme.PurpleGradientEnd
+import com.kuva.vpn.ui.theme.VlessBlue
+import com.kuva.vpn.ui.theme.AccentBlue
+import com.kuva.vpn.ui.theme.TrojanOrange
+import com.kuva.vpn.ui.theme.TrojanOrangeLight
+import com.kuva.vpn.ui.theme.SsGreen
+import com.kuva.vpn.ui.theme.SuccessGreen
+import com.kuva.vpn.ui.theme.SuccessGreenDeep
+import com.kuva.vpn.ui.theme.WarnAmber
+import com.kuva.vpn.ui.theme.StatusRed
+import com.kuva.vpn.ui.theme.DangerLight
+import com.kuva.vpn.ui.theme.NeonPurple
+import com.kuva.vpn.ui.theme.pingColor
 
 /**
  * Free configs screen with two panes:
@@ -249,17 +263,17 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                 shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Transparent,   // ghost: neon border only
-                    contentColor = Color(0xFFB026FF),      // neon purple label
+                    contentColor = NeonPurple,      // neon purple label
                 ),
-                border = BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFFB026FF), Color(0xFF7C4DFF)))),
+                border = BorderStroke(2.dp, Brush.linearGradient(listOf(NeonPurple, PurpleGradientEnd))),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
             ) {
                 if (searching) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color(0xFFB026FF))
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = NeonPurple)
                     Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.searching), color = Color(0xFFB026FF), fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(stringResource(R.string.searching), color = NeonPurple, fontWeight = FontWeight.Bold, maxLines = 1)
                 } else {
-                    Text(stringResource(R.string.search_free), color = Color(0xFFB026FF), fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(stringResource(R.string.search_free), color = NeonPurple, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
 
@@ -310,8 +324,8 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                             ),
                             border = BorderStroke(
                                 2.dp,
-                                if (myPing) Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, Color(0xFF00C853)))
-                                else Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, Color(0xFF00E676))),
+                                if (myPing) Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, SuccessGreenDeep))
+                                else Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, SuccessGreen)),
                             ),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                         ) {
@@ -361,8 +375,8 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                     ),
                     border = BorderStroke(
                         2.dp,
-                        if (vaultPing) Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, Color(0xFF00C853)))
-                        else Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, Color(0xFF00E676))),
+                        if (vaultPing) Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, SuccessGreenDeep))
+                        else Brush.linearGradient(listOf(com.kuva.vpn.ui.theme.StatusGreen, SuccessGreen)),
                     ),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 ) {
@@ -384,12 +398,12 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                     shape = MaterialTheme.shapes.medium,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.Transparent,
-                        contentColor = Color(0xFFFF1744),
+                        contentColor = StatusRed,
                     ),
-                    border = BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFFFF1744), Color(0xFFFF5252)))),
+                    border = BorderStroke(2.dp, Brush.linearGradient(listOf(StatusRed, DangerLight))),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 ) {
-                    Text(stringResource(R.string.delete_dead), color = Color(0xFFFF1744), fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(stringResource(R.string.delete_dead), color = StatusRed, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
 
@@ -429,6 +443,7 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                             onTestSpeed = { viewModel.testSpeed(p.id) },
                             onFavorite = { viewModel.toggleFavorite(p.id, !p.isFavorite) },
                             onShare = { shareLink = builder.build(p) },
+                            showSource = true,   // vault: show which source each config came from
                         )
                     }
                 }
@@ -469,7 +484,8 @@ private fun SearchRow(profile: Profile) {
                 Row {
                     Text(
                         Formatters.ping(profile.pingMs),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            textDirection = latinDir(Formatters.ping(profile.pingMs))),
                         color = when {
                             profile.pingMs == null -> MaterialTheme.colorScheme.onSurfaceVariant
                             profile.pingMs < 0 -> MaterialTheme.colorScheme.error
@@ -626,12 +642,12 @@ private fun SourcesDialog(
 @Composable
 fun ProtocolRibbon(protocol: String) {
     val (label, colors) = when (protocol.uppercase()) {
-        "VLESS" -> "VLESS" to listOf(Color(0xFF2979FF), Color(0xFF00E5FF))
-        "VMESS" -> "VMESS" to listOf(Color(0xFFB026FF), Color(0xFF7C4DFF))
-        "TROJAN" -> "TROJAN" to listOf(Color(0xFFFF6D3B), Color(0xFFFFAB40))
-        "SHADOWSOCKS" -> "SS" to listOf(Color(0xFF2ECC71), Color(0xFF00E676))
+        "VLESS" -> "VLESS" to listOf(VlessBlue, AccentBlue)
+        "VMESS" -> "VMESS" to listOf(NeonPurple, PurpleGradientEnd)
+        "TROJAN" -> "TROJAN" to listOf(TrojanOrange, TrojanOrangeLight)
+        "SHADOWSOCKS" -> "SS" to listOf(SsGreen, SuccessGreen)
         "SOCKS" -> "SOCKS" to listOf(Color(0xFF90A4AE), Color(0xFFB0BEC5))
-        "HTTP" -> "HTTP" to listOf(Color(0xFFFFC107), Color(0xFFFFE082))
+        "HTTP" -> "HTTP" to listOf(WarnAmber, Color(0xFFFFE082))
         else -> protocol.take(6).uppercase() to listOf(Color(0xFF90A4AE), Color(0xFFB0BEC5))
     }
     // fixed 58dp inside the 60dp card row: 1dp breathing room top & bottom
@@ -659,6 +675,19 @@ fun ProtocolRibbon(protocol: String) {
     Spacer(Modifier.width(8.dp))
 }
 
+/**
+ * Bidi helper: values that are pure Latin ("222 ms", "191.5 KB / 5 GB",
+ * "ger.example.ir:2083") get a forced LTR text direction; strings containing
+ * Persian letters get an explicit RTL base direction — Unspecified inherits
+ * the surrounding container's direction, and the sub cards render inside an
+ * LTR-locked container, which mirrored mixed strings ("44 config",
+ * "traffic: ... GB (unlimited)") and dropped the infinity glyph.
+ */
+private fun latinDir(v: String): androidx.compose.ui.text.style.TextDirection =
+    if (v.none { c -> c in '\u0590'..'\u08FF' })
+        androidx.compose.ui.text.style.TextDirection.Ltr
+    else androidx.compose.ui.text.style.TextDirection.Rtl
+
 @Composable
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 fun ConfigRow(
@@ -673,6 +702,7 @@ fun ConfigRow(
     connected: Boolean = false,
     testing: Boolean = false,
     pinging: Boolean = false,   // single ping in progress: spinner instead of the ping value
+    showSource: Boolean = false, // vault rows: show which source the config came from
 ) {
     // animated neon border: blue when selected, green when the tunnel is on it
     val pulse by rememberInfiniteTransition(label = "neonPulse").animateFloat(
@@ -680,8 +710,8 @@ fun ConfigRow(
         animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
         label = "neonAlpha",
     )
-    val neonBlue = listOf(Color(0xFF00E5FF), Color(0xFF2979FF))
-    val neonGreen = listOf(Color(0xFF39FF14), Color(0xFF00C853))
+    val neonBlue = listOf(AccentBlue, VlessBlue)
+    val neonGreen = listOf(Color(0xFF39FF14), SuccessGreenDeep)
     val borderBrush = when {
         connected -> Brush.linearGradient(neonGreen.map { it.copy(alpha = 0.45f + 0.55f * pulse) })
         selected  -> Brush.linearGradient(neonBlue.map { it.copy(alpha = 0.45f + 0.55f * pulse) })
@@ -710,17 +740,24 @@ fun ConfigRow(
                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                     } else Text(
                         Formatters.ping(profile.pingMs),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = when {
-                            profile.pingMs == null -> MaterialTheme.colorScheme.onSurfaceVariant
-                            profile.pingMs < 0 -> MaterialTheme.colorScheme.error
-                            else -> com.kuva.vpn.ui.theme.StatusGreen  // neon green ms
-                        },
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            textDirection = latinDir(Formatters.ping(profile.pingMs))),
+color = pingColor(profile.pingMs),
                     )
+                    if (showSource) profile.source?.let {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
                     profile.speedDownKbps?.let {
                         Spacer(Modifier.width(6.dp))
                         Text("↓ ${Formatters.speed((it * 1000).toLong())}",
-                            style = MaterialTheme.typography.labelSmall)
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                textDirection = TextDirection.Ltr))
                     }
                 }
             }
@@ -856,7 +893,7 @@ private fun UndoBannerHost(
                 ) {
                     Text(
                         "\u2715",
-                        color = Color(0xFFFF5252),
+                        color = DangerLight,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
                     )
@@ -873,7 +910,7 @@ private fun UndoBannerHost(
                     ) {
                         Text(
                             data.visuals.actionLabel ?: "",
-                            color = Color(0xFFB026FF),
+                            color = NeonPurple,
                             fontWeight = FontWeight.Bold,
                         )
                     }

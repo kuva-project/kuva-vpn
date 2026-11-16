@@ -111,7 +111,7 @@
 
     <!-- My configs / subscriptions -->
     <string name="add_config">افزودن کانفیگ</string>
-    <string name="add_manual">افزودن کانفیگ</string>
+    <string name="add_manual">افزودن</string>
     <string name="add_sub">افزودن ساب</string>
     <string name="sub_update">به‌روزرسانی</string>
     <string name="sub_refresh">تازه‌سازی</string>

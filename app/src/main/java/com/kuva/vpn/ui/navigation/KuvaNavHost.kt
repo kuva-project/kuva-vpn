@@ -121,7 +121,7 @@ fun KuvaNavHost(sharedLink: String? = null) {
                                             .padding(top = 2.dp, end = 2.dp)
                                             .size(13.dp)
                                             .clip(androidx.compose.foundation.shape.CircleShape)
-                                            .background(androidx.compose.ui.graphics.Color(0xFFFF3B30)),
+                                            .background(com.kuva.vpn.ui.theme.StatusRed),
                                     )
                                 }
                             }

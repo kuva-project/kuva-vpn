@@ -2,6 +2,38 @@
 
 All notable changes to KUVAVpn are documented here.
 
+## v1.2.3 — 2026-11-16
+
+### Added
+- **Ping values colored by quality** in the free vault, search results and
+  every My Configs row (manual + subscriptions): green up to 200 ms, yellow
+  200–450 ms, red above 450 ms, gray when untested, red when dead. The
+  dashboard stat tiles stay white — colored numbers there would fake a
+  meaning the data doesn't have.
+
+### Fixed
+- **Shadowsocks links with base64-encoded userinfo failed to import**
+  (Shadowmere-style `ss://BASE64@host:port#name` shares were silently
+  dropped): the form A/B heuristic misrouted them to whole-body base64
+  decoding, which failed. Any link containing `@` before the fragment is
+  now parsed as form A (`base64(method:password)@host:port`), covering raw
+  and encoded userinfo alike; real form B links still work.
+- **Quick Settings tile went stale**: the KUVA tile in the Android quick
+  settings panel only repaints while the panel is open, so connecting or
+  disconnecting from inside the app left it showing the old state until the
+  panel was reopened. Every state change now requests a tile refresh.
+- **RTL mirroring of mixed Persian strings** in the config screens:
+  Persian-containing texts inside LTR-locked containers ("۴۴ کانفیگ",
+  "ترافیک: … (نامحدود)") rendered mirrored and dropped the infinity glyph.
+  The bidi helper now forces an explicit RTL base direction for any string
+  containing Persian letters.
+- **Subscription expiry line could overflow**: the expiry is now a single
+  non-wrapping Text; the Persian "add config" button label was shortened to
+  fit its third of the toolbar.
+- **Color drift across screens**: the neon palette is now defined once as
+  tokens in the theme (protocol badges, snackbar states, usage bars, banner
+  dots); screens reference the tokens instead of scattering raw hex values.
+
 ## v1.2.2 — 2026-11-15
 
 ### Added

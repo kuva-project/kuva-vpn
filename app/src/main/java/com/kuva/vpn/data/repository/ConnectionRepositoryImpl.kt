@@ -1,5 +1,8 @@
 package com.kuva.vpn.data.repository
 
+import android.content.ComponentName
+import android.content.Context
+import com.kuva.vpn.core.service.KuvaTileService
 import com.kuva.vpn.domain.model.ConnectionState
 import com.kuva.vpn.domain.model.ExitIpInfo
 import com.kuva.vpn.domain.model.LiveStats
@@ -20,6 +23,7 @@ import javax.inject.Singleton
 
 @Singleton
 class ConnectionRepositoryImpl @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: Context,
     private val profileRepo: com.kuva.vpn.domain.repository.ProfileRepository,
 ) : ConnectionRepository {
 
@@ -112,6 +116,18 @@ class ConnectionRepositoryImpl @Inject constructor(
             _stats.value = LiveStats()
         }
         _state.value = s
+        // The Quick Settings tile service is only bound while the panel is
+        // open — its flow collector is dead in the background, so connecting
+        // from INSIDE the app left the tile stale. Asking the system to
+        // re-listen wakes the service for one repaint on every transition.
+        try {
+            android.service.quicksettings.TileService.requestListeningState(
+                appContext,
+                ComponentName(appContext, KuvaTileService::class.java),
+            )
+        } catch (_: Exception) {
+            // tile may not be pinned to quick settings yet — ignore
+        }
     }
 
     override fun setActiveProfile(p: Profile) {

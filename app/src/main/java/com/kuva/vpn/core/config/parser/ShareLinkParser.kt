@@ -168,11 +168,15 @@ class ShareLinkParser @Inject constructor() {
     private fun parseShadowsocks(link: String): Profile? {
         return try {
             val body = link.removePrefix("ss://")
-            // form A: base64(method:password)@host:port#name
+            // form A: base64(method:password)@host:port#name (userinfo may be
+            // raw "method:pass" OR base64-encoded — both contain '@')
             // form B: base64(method:password@host:port) (whole thing)
-            if (body.contains("@", ignoreCase = true) && !body.substringBefore("@").all {
-                    it.isLetterOrDigit() || it in "+/=_-"
-                }) {
+            // '@' is never part of the base64 alphabet, so ANY '@' before the
+            // fragment means form A. The old per-character heuristic misrouted
+            // links with a base64-ENCODED userinfo (all letters/digits, e.g.
+            // Shadowmere shares) to form B, where decoding failed and the
+            // config was silently dropped.
+            if (body.substringBefore("#").contains("@")) {
                 parseSsFormA(link)
             } else {
                 val decoded = String(base64Decode(body.substringBefore("#")) ?: return null)

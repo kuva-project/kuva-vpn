@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
@@ -88,8 +89,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.rememberUpdatedState
 
-// bright neon blue for the engine-switch active state
-private val NeonSwitchBlue = Color(0xFF33CCFF)
+// bright neon blue for the engine-switch active state — shared theme token
+private val NeonSwitchBlue = com.kuva.vpn.ui.theme.AccentBlue
 
 /**
  * Main dashboard, modeled on the reference screenshots: centered power button,
@@ -283,7 +284,7 @@ fun DashboardScreen(
                             ) {
                                 Text(
                                     stringResource(R.string.exit_exit),
-                                    color = Color(0xFFFF1744),
+                                    color = StatusRed,
                                     fontWeight = FontWeight.Bold,
                                 )
                             }
@@ -724,10 +725,14 @@ private fun StatCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center)
             Spacer(Modifier.height(6.dp))
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+            // values like "222 ms" / "191.5 KB" are Latin: force LTR text
+            // direction so the RTL layout doesn't mirror unit and number
+            Text(value, style = MaterialTheme.typography.titleMedium.copy(
+                textDirection = TextDirection.Ltr), fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center)
             if (sub != null) {
-                Text(sub, style = MaterialTheme.typography.labelSmall,
+                Text(sub, style = MaterialTheme.typography.labelSmall.copy(
+                    textDirection = TextDirection.Ltr),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center)
             }
@@ -786,7 +791,7 @@ private fun UpdateBanner(onOpenSettings: () -> Unit = {}) {
             modifier = Modifier
                 .size(10.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFFF3B30)),
+                .background(StatusRed),
         )
         Spacer(Modifier.width(10.dp))
         Column {
@@ -916,7 +921,8 @@ private fun ExitTile(
                 )
                 Text(
                     location ?: stringResource(R.string.no_location),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        textDirection = latinDir(location ?: "")),
                     maxLines = 1,
                 )
             }
@@ -1052,6 +1058,19 @@ private fun isoFromCountryName(name: String?): String? {
     return byName[key]
 }
 
+/**
+ * Bidi helper: values that are pure Latin ("222 ms", "191.5 KB / 5 GB",
+ * "ger.example.ir:2083") get a forced LTR text direction; strings containing
+ * Persian letters get an explicit RTL base direction — Unspecified inherits
+ * the surrounding container's direction, and the sub cards render inside an
+ * LTR-locked container, which mirrored mixed strings ("44 config",
+ * "traffic: ... GB (unlimited)") and dropped the infinity glyph.
+ */
+private fun latinDir(v: String): androidx.compose.ui.text.style.TextDirection =
+    if (v.none { c -> c in '\u0590'..'\u08FF' })
+        androidx.compose.ui.text.style.TextDirection.Ltr
+    else androidx.compose.ui.text.style.TextDirection.Rtl
+
 @Composable
 private fun InfoRow(label: String, value: String) {
     Row(
@@ -1061,7 +1080,8 @@ private fun InfoRow(label: String, value: String) {
     ) {
         Text(label, style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(90.dp))
-        Text(value, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+        Text(value, style = MaterialTheme.typography.bodyMedium.copy(
+            textDirection = latinDir(value)), maxLines = 1)
     }
 }
 

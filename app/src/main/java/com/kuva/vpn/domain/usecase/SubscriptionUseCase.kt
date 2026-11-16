@@ -189,12 +189,18 @@ class SubscriptionUseCase @Inject constructor(
                     added++
                 }
 
+                // panels stop sending (or zero out) subscription-userinfo
+                // once a plan expires — merging with the last known values
+                // keeps traffic/expiry on screen instead of resetting to ∞
+                val prev = subDao.getById(id)
                 subDao.markUpdated(
                     id = id,
                     ts = System.currentTimeMillis(),
                     count = profiles.size,
-                    up = info?.upload, down = info?.download,
-                    total = info?.total, expire = info?.expire,
+                    up = info?.upload ?: prev?.uploadBytes,
+                    down = info?.download ?: prev?.downloadBytes,
+                    total = info?.total?.takeIf { it > 0 } ?: prev?.totalBytes,
+                    expire = info?.expire?.takeIf { it > 0 } ?: prev?.expireEpochSec,
                 )
                 Result.success(added)
             }
