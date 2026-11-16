@@ -2,9 +2,17 @@
 
 All notable changes to KUVAVpn are documented here.
 
-## v1.2.3 — 2026-11-16
+## v1.2.4 — 2026-11-16
 
 ### Added
+- **Cancellable Swift connect**: the power button now stays tappable while
+  the Kuva Swift handshake/scan is running (it can take up to ~2 minutes) —
+  a second tap cancels the attempt and the button is ready for the next
+  command. Previously the button was disabled during the whole scan, so
+  there was no way to back out.
+- **Swift scan shows as connecting**: the power button now turns yellow
+  (pulsing) during the Swift scan instead of staying gray until it suddenly
+  went green.
 - **Ping values colored by quality** in the free vault, search results and
   every My Configs row (manual + subscriptions): green up to 200 ms, yellow
   200–450 ms, red above 450 ms, gray when untested, red when dead. The

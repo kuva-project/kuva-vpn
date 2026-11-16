@@ -607,6 +607,9 @@ private fun StatusPill(state: ConnectionState) {
 private fun PowerButton(state: ConnectionState, onClick: () -> Unit) {
     val busy = state.isBusy
     val connected = state is ConnectionState.Connected
+    // while connecting (Xray or Swift) the button stays tappable: the second
+    // tap routes through toggle() -> requestStop() and CANCELS the attempt
+    val cancellable = state is ConnectionState.Connecting || state is ConnectionState.SwiftConnecting
     val transition = rememberInfiniteTransition(label = "pulse")
     val pulse by transition.animateFloat(
         initialValue = 0.92f, targetValue = 1.0f,
@@ -619,6 +622,9 @@ private fun PowerButton(state: ConnectionState, onClick: () -> Unit) {
     val baseColor = when {
         connected -> StatusGreen
         state is ConnectionState.Connecting -> StatusOrange
+        // Swift handshake/scan can take ~2 minutes: show it as connecting
+        // (yellow), not gray-idle — the user must see the button is working
+        state is ConnectionState.SwiftConnecting -> StatusOrange
         state is ConnectionState.Error -> StatusRed
         else -> StatusGray
     }
@@ -645,7 +651,7 @@ private fun PowerButton(state: ConnectionState, onClick: () -> Unit) {
                         listOf(glowColor.copy(alpha = 0.95f), glowColor.copy(alpha = 0.65f))
                     )
                 )
-                .clickable(enabled = !busy, onClick = onClick),
+                .clickable(enabled = !busy || cancellable, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
             if (busy) {
