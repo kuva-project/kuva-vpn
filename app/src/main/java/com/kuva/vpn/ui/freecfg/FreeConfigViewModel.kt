@@ -31,13 +31,15 @@ class FreeConfigViewModel @Inject constructor(
     val connectionState: StateFlow<com.kuva.vpn.domain.model.ConnectionState> = connRepo.state
 
 
-    /** While a run (search/ping) is active the list keeps its insertion
-     *  order — the first config stays on top; results arriving mid-run must
-     *  not reshuffle rows. Sorted-by-ping resumes when the run ends. */
+    /** patch 231: ping runs are LIVE-SORTED — every ~1 s persisted batch
+     *  re-fires the list flow and winners slide to the top as they arrive,
+     *  so the best config is already on top when the run ends. Only the
+     *  discovery (search) phase keeps its arrival order mid-run: new
+     *  configs stream in while searching and must not reshuffle. */
     private fun stableOrder(flow: kotlinx.coroutines.flow.Flow<List<Profile>>): kotlinx.coroutines.flow.Flow<List<Profile>> =
         kotlinx.coroutines.flow.combine(flow, freeUseCase.progress) { list, prog ->
-            if (prog.running) {
-                // insertion order while running: rows must not reshuffle mid-run
+            if (prog.running && prog.phase == "search") {
+                // arrival order while SEARCHING: rows must not reshuffle mid-run
                 list.sortedBy { it.id }
             } else {
                 // final order: alive by ping asc, then untested, then dead

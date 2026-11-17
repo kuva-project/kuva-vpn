@@ -96,6 +96,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var showResetConfirm by remember { mutableStateOf(false) }
     var showGeoInfo by remember { mutableStateOf(false) }
     var geoSourcePick by remember { mutableStateOf("") }
+    var showPsiphonModePick by remember { mutableStateOf(false) }
     var showSwiftLog by remember { mutableStateOf(false) }
     var swiftLog by remember { mutableStateOf<String?>(null) }
     var showXrayLog by remember { mutableStateOf(false) }
@@ -124,6 +125,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     }
     // which numeric editor is open (null = none)
     var editing by remember { mutableStateOf<NumField?>(null) }
+    // custom MASQUE SNI editor (patch 216)
+    var showSniEdit by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -264,15 +267,6 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 onClick = { editing = NumField.RETRY },
             )
             SwitchRow(stringResource(R.string.auto_ping), null, s.autoPingAfterImport, viewModel::setAutoPing)
-            // HTTP/3 is a Swift-engine transport — disabled (and dimmed)
-            // while the Xray engine is selected
-            SwitchRow(
-                stringResource(R.string.swift_h3),
-                stringResource(R.string.swift_h3_desc),
-                s.swiftH3,
-                viewModel::setSwiftH3,
-                enabled = s.engineMode == "swift",
-            )
             SwitchRow(
                 stringResource(R.string.swift_scan),
                 stringResource(R.string.swift_scan_desc),
@@ -283,6 +277,53 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             // card (bottom sheet) — settings no longer duplicates them
             // server selection (manual/lowest ping/best performance) removed
             // by user request — manual profile choice is always used
+        }
+
+        // ---------- Kuva Swift (patch 216) ----------
+        // anti-DPI controls in their own card, per user request; defaults
+        // match the core (fragment off, noize off, SNI = core default) —
+        // the always-on combination stalled tunnels on Hamrah-Aval
+        SectionCard(stringResource(R.string.swift_settings)) {
+            SwitchRow(
+                stringResource(R.string.swift_fragment),
+                stringResource(R.string.swift_fragment_desc),
+                s.swiftFragment,
+                viewModel::setSwiftFragment,
+                enabled = s.engineMode == "swift",
+            )
+            SwitchRow(
+                stringResource(R.string.swift_noize),
+                stringResource(R.string.swift_noize_desc),
+                s.swiftNoize,
+                viewModel::setSwiftNoize,
+                enabled = s.engineMode == "swift",
+            )
+            // patch 224: HTTP/3 moved back above the SNI row and is now
+            // dimmed when the engine is Xray — it only ever affects the
+            // Swift core, same treatment as fragment/noize (user request:
+            // "کامل غیرفعال مثل فرگمنت و noize")
+            SwitchRow(
+                stringResource(R.string.swift_h3),
+                stringResource(R.string.swift_h3_desc),
+                s.swiftH3,
+                viewModel::setSwiftH3,
+                enabled = s.engineMode == "swift",
+            )
+            ValueRow(
+                title = stringResource(R.string.swift_sni),
+                value = s.swiftSni.ifBlank { stringResource(R.string.swift_sni_default) },
+                onClick = { showSniEdit = true },
+            )
+            // psiphon chain direction (patch 217): how the psiphon layer
+            // rides the MASQUE tunnel when the dashboard switch is on
+            ValueRow(
+                title = stringResource(R.string.swift_psiphon_mode),
+                value = if (s.swiftPsiphonMode == "reverse")
+                    stringResource(R.string.psiphon_mode_reverse)
+                else
+                    stringResource(R.string.psiphon_mode_chain),
+                onClick = { showPsiphonModePick = true },
+            )
         }
 
         // ---------- security ----------
@@ -651,6 +692,59 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             onDismiss = { editing = null },
         )
     }
+    if (showPsiphonModePick) {
+        AlertDialog(
+            onDismissRequest = { showPsiphonModePick = false },
+            title = { Text(stringResource(R.string.swift_psiphon_mode)) },
+            text = {
+                Column {
+                    listOf(
+                        "chain" to stringResource(R.string.psiphon_mode_chain),
+                        "reverse" to stringResource(R.string.psiphon_mode_reverse),
+                    ).forEach { (mode, label) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showPsiphonModePick = false; viewModel.setSwiftPsiphonMode(mode) }
+                                .padding(vertical = 6.dp),
+                        ) {
+                            RadioButton(
+                                selected = s.swiftPsiphonMode == mode,
+                                onClick = { showPsiphonModePick = false; viewModel.setSwiftPsiphonMode(mode) },
+                            )
+                            Text(label, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                    Text(
+                        stringResource(
+                            if (s.swiftPsiphonMode == "reverse") R.string.psiphon_mode_reverse_desc
+                            else R.string.psiphon_mode_chain_desc
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showPsiphonModePick = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+    if (showSniEdit) {
+        TextEditDialog(
+            title = stringResource(R.string.swift_sni),
+            initial = s.swiftSni,
+            placeholder = "www.cloudflare.com",
+            hint = stringResource(R.string.swift_sni_hint),
+            onConfirm = { viewModel.setSwiftSni(it) },
+            onDismiss = { showSniEdit = false },
+        )
+    }
 }
 
 /** Identifies which numeric setting is being edited. */
@@ -658,6 +752,43 @@ private enum class NumField { TIMEOUT, RETRY, MTU, SOCKS_PORT, SPEED_LIMIT }
 
 /** Small holder for the dialog config. */
 private data class PreferenceRow(val title: String, val value: Int, val range: IntRange, val unitRes: Int)
+
+/** Free-text editor (patch 216: custom MASQUE SNI). Blank confirm = reset. */
+@Composable
+private fun TextEditDialog(
+    title: String,
+    initial: String,
+    placeholder: String,
+    hint: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                placeholder = { Text(placeholder) },
+                supportingText = { Text(hint) },
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(text)
+                    onDismiss()
+                },
+            ) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+        },
+    )
+}
 
 @Composable
 private fun NumberEditDialog(

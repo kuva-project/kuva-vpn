@@ -39,6 +39,23 @@ class KuvaApplication : Application() {
         appScope.launch {
             runCatching { profileDao.resetAllTestResults() }
         }
+        // patch 223: every fresh app start begins with EMPTY logs so a
+        // bug report never mixes old sessions with the current one (the
+        // 2026-11-11 report still carried UTC lines from previous runs
+        // alongside Iran-stamped lines). Cores recreate their files on
+        // demand, so deleting here is safe — no core can be running yet:
+        // the VPN service lives in this same process, so if it were up,
+        // onCreate would not have run at all. Crash reports are kept.
+        appScope.launch(Dispatchers.IO) {
+            runCatching {
+                java.io.File(filesDir, "swift/swift.log").delete()
+                java.io.File(cacheDir, "logs/xray.log").delete()
+                java.io.File(filesDir, "logs/xray_error.log").delete()
+                java.io.File(filesDir, "logs/xray_access.log").delete()
+                java.io.File(filesDir, "exports").listFiles()
+                    ?.forEach { if (it.name.startsWith("swift_log_")) it.delete() }
+            }
+        }
         // silent update check once per app start; failures are ignored —
         // the user just sees no banner / no red dot
         appScope.launch {
@@ -62,6 +79,7 @@ class KuvaApplication : Application() {
             val s = settings.settings.first()
             applyTheme(s.themeMode)
         }
+
         // One-time asset prep (geoip/geosite) is done lazily by XrayCoreManager.initCoreEnv
     }
 

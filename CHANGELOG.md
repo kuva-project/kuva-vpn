@@ -2,6 +2,31 @@
 
 All notable changes to KUVAVpn are documented here.
 
+## v1.2.5 — 2026-11-17
+
+### Added
+- **Live ping race in the free lists**: pressing Ping jumps to the top of
+  the list once, then the list re-sorts live while the run is ongoing —
+  fastest configs slide up in real time and the view stays pinned to the
+  top so the whole race is visible; manual scrolling during the run stays
+  free. When the run ends the list settles for a moment and lands on the
+  lowest ping at the top (vault + search).
+- **Fixed-width ping column** in vault rows: values no longer shift the
+  row layout while they update during a run.
+
+### Changed
+- **HTTP/3 row in settings**: moved above the SNI row and locked while the
+  Xray engine is selected (HTTP/3 only affects Kuva Swift).
+
+### Fixed
+- **Swift bind chain exit**: in chain mode the --bind proxy now always
+  exits via WARP (port rewiring in the Swift core manager).
+- **Log timestamps now use Iran time** for swift.log — the core stamped
+  UTC, so log lines were hours off from every other log in the app.
+- **Fresh app start clears old logs**: log files start empty on every
+  launch, so stale lines from a previous session can't be mistaken for
+  current activity.
+
 ## v1.2.4 — 2026-11-16
 
 ### Added

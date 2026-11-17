@@ -61,6 +61,11 @@ class DashboardViewModel @Inject constructor(
         .map { it.swiftPsiphonCountry }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
+    /** patch 217: psiphon chain direction ("chain" / "reverse"). */
+    val swiftPsiphonMode: StateFlow<String> = settings.settings
+        .map { it.swiftPsiphonMode }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "chain")
+
     init {
         // refresh Exit IP / Location automatically on every successful connect.
         // IMPORTANT: reads connRepo.state (constructor param, already initialized),

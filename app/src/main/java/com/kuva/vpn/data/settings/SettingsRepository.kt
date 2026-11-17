@@ -57,9 +57,22 @@ data class AppSettings(
     val swiftScan: Boolean = true,     // route scan before Swift connect
     val geoSource: String = "Chocolate4U/Iran-v2ray-rules", // Geo databases repo
     val showNotifSpeed: Boolean = false, // up/down speed in the status-bar notification
-    val swiftPsiphon: Boolean = false, // route Swift through the Psiphon network
+    val swiftPsiphon: Boolean = false, // psiphon layer on (dashboard switch)
+    // patch 217: HOW the psiphon layer rides the MASQUE tunnel when
+    // swiftPsiphon is on:
+    //   "chain"   = --psiphon          (WARP -> Psiphon; exit = psiphon)
+    //   "reverse" = --psiphon-reverse  (Psiphon -> WARP; exit = WARP)
+    val swiftPsiphonMode: String = "chain",
     // preferred psiphon exit country: "" = Auto, otherwise ISO-2 like "US"/"DE"
     val swiftPsiphonCountry: String = "",
+    // anti-DPI controls (patch 216). Fragment splits the TLS ClientHello;
+    // noize is the core's obfuscation profile. Both default OFF to match the
+    // core's and PattNG's defaults — with them always on, Hamrah-Aval
+    // stalled the h2 data plane 30-60 s after every handshake.
+    val swiftFragment: Boolean = false,
+    val swiftNoize: Boolean = false,
+    // custom MASQUE SNI; "" = the core's own default (www.cloudflare.com)
+    val swiftSni: String = "",
 ) {
     fun effectiveDnsServers(): List<String> = when (dnsProvider) {
         "cloudflare" -> listOf("1.1.1.1", "1.0.0.1")
@@ -106,7 +119,13 @@ class SettingsRepository @Inject constructor(
         val geoSource = stringPreferencesKey("geo_source")
         val showNotifSpeed = booleanPreferencesKey("notif_show_speed")
         val swiftPsiphon = booleanPreferencesKey("swift_psiphon")
+        // patch 217: psiphon chain direction; the legacy boolean stays the
+        // on/off source for the dashboard switch, service gate and notif
+        val swiftPsiphonMode = stringPreferencesKey("swift_psiphon_mode")
         val swiftPsiphonCountry = stringPreferencesKey("swift_psiphon_country")
+        val swiftFragment = booleanPreferencesKey("swift_fragment")
+        val swiftNoize = booleanPreferencesKey("swift_noize")
+        val swiftSni = stringPreferencesKey("swift_sni")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -140,7 +159,13 @@ class SettingsRepository @Inject constructor(
             geoSource = p[Keys.geoSource] ?: "Chocolate4U/Iran-v2ray-rules",
             showNotifSpeed = p[Keys.showNotifSpeed] ?: false,
             swiftPsiphon = p[Keys.swiftPsiphon] ?: false,
+            swiftPsiphonMode = p[Keys.swiftPsiphonMode] ?: (
+                if (p[Keys.swiftPsiphon] == true) "reverse" else "chain"
+            ),
             swiftPsiphonCountry = p[Keys.swiftPsiphonCountry] ?: "",
+            swiftFragment = p[Keys.swiftFragment] ?: false,
+            swiftNoize = p[Keys.swiftNoize] ?: false,
+            swiftSni = p[Keys.swiftSni] ?: "",
         )
     }
 
@@ -169,6 +194,19 @@ class SettingsRepository @Inject constructor(
     suspend fun setSwiftPsiphon(b: Boolean) = context.dataStore.edit { it[Keys.swiftPsiphon] = b }
 
     /**
+     * patch 217: psiphon chain direction, "chain" or "reverse"; anything
+     * else is coerced to chain. The legacy swiftPsiphon boolean stays the
+     * on/off source of truth for the dashboard switch, service gate and
+     * notification, so picking a direction here also turns the layer on —
+     * the settings card is where the mode is chosen, the dashboard switch
+     * simply toggles it.
+     */
+    suspend fun setSwiftPsiphonMode(mode: String) = context.dataStore.edit {
+        it[Keys.swiftPsiphonMode] = if (mode == "reverse") "reverse" else "chain"
+        it[Keys.swiftPsiphon] = true
+    }
+
+    /**
      * Preferred psiphon exit country. The core (aether) only accepts values
      * of exactly two ASCII letters (it uppercases and validates them), so we
      * store "" for Auto and uppercase ISO-2 codes otherwise — anything else
@@ -180,6 +218,15 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { it[Keys.swiftPsiphonCountry] = safe }
     }
     suspend fun setSwiftScan(b: Boolean) = context.dataStore.edit { it[Keys.swiftScan] = b }
+
+    /** SNI must be a printable-ASCII host name without spaces, <=253 chars. */
+    private fun sniSafe(v: String): String =
+        v.trim().takeIf { s -> s.isNotEmpty() && s.length <= 253 &&
+            s.all { it.code in 0x21..0x7e } } ?: ""
+
+    suspend fun setSwiftFragment(b: Boolean) = context.dataStore.edit { it[Keys.swiftFragment] = b }
+    suspend fun setSwiftNoize(b: Boolean) = context.dataStore.edit { it[Keys.swiftNoize] = b }
+    suspend fun setSwiftSni(v: String) = context.dataStore.edit { it[Keys.swiftSni] = sniSafe(v) }
     suspend fun setGeoSource(src: String) = context.dataStore.edit { it[Keys.geoSource] = src }
     suspend fun setShowNotifSpeed(b: Boolean) = context.dataStore.edit { it[Keys.showNotifSpeed] = b }
     suspend fun setStatsEnabled(b: Boolean) = context.dataStore.edit { it[Keys.stats] = b }

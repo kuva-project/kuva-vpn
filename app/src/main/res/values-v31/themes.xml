@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- patch 230: Android 12+ shows the system splash screen on every
+         activity (re)creation — including the per-app language switch, which
+         recreates MainActivity. Without this override the splash paints
+         Android's default black; painting it the app's real background
+         (#141414) turns the language-switch flash into a near-invisible
+         seamless dark transition instead of a hard black cut. -->
+    <style name="Theme.KUVAVpn" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/window_bg</item>
+        <item name="android:windowSplashScreenBackground">@color/window_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

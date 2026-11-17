@@ -153,6 +153,96 @@ class SwiftCoreManager @Inject constructor() {
         tunnelRestored = false
     }
 
+    /**
+     * Fired when tunnel ends BURST (>= GATE_BURST_LIMIT within
+     * GATE_BURST_WINDOW_MS) — the poisoned-gateway pattern (Hamrah-Aval
+     * 2026-11: h2 handshake ok, data plane stalled 30-60 s in, core loops
+     * "keepalive timeout -> retrying last known-good gateway" forever).
+     * The service stops the core, wipes the gateway cache and reconnects,
+     * so the fresh process rescans and lands on a different edge.
+     */
+    @Volatile
+    var onGatePoisoned: (() -> Unit)? = null
+
+    /**
+     * patch 219: fired ONCE per core process when the psiphon layer inside
+     * the tunnel dies ("psiphon: tunnel failed" / "close tunnel ssh error",
+     * real case 2026-11-16: sendSshKeepAlive EOF after 9 min). The MASQUE
+     * tunnel and the core itself stay alive, so onExited never fires and
+     * user traffic silently falls back to the raw WARP exit — IR-geolocated
+     * on Hamrah-Aval. The service cuts tun2socks immediately so not a byte
+     * leaves via WARP, waits for psiphon-tunnel-core's own reconnect
+     * ("psiphon is ready" again) and restores the data path, or restarts
+     * the core (fast: the lastconn gateway cache is kept).
+     */
+    @Volatile
+    var onPsiphonDied: (() -> Unit)? = null
+
+    /** One-shot latch for [onPsiphonDied] per core process. */
+    @Volatile
+    var psiphonDied: Boolean = false
+        private set
+
+    private val gateEndTimes = ArrayDeque<Long>()
+
+    @Volatile
+    private var lastGateNoteAt = 0L
+
+    /**
+     * patch 219: psiphon death lines (stdout AND stderr — both drain
+     * threads call this). Also clears psiphonReady so the service's wait
+     * loop keys on the NEXT "psiphon is ready", i.e. a genuine reconnect.
+     */
+    private fun notePsiphonDeath(line: String) {
+        if (line.contains("psiphon: tunnel failed") ||
+            line.contains("psiphon: close tunnel ssh error")
+        ) {
+            psiphonReady = false
+            if (!psiphonDied) {
+                psiphonDied = true
+                Log.w(TAG, "psiphon layer died — service will cut traffic and wait for its reconnect")
+                onPsiphonDied?.invoke()
+            }
+        }
+    }
+
+    private fun noteTunnelEnded() {
+        val now = System.currentTimeMillis()
+        // the same core log line can arrive on stdout AND stderr — the two
+        // drain threads must not double-count one event (real tunnel ends
+        // are always >= 2 s apart: the core waits AETHER_MASQUE_RECONNECT_SECS)
+        if (now - lastGateNoteAt < 1_000L) return
+        lastGateNoteAt = now
+        synchronized(gateEndTimes) {
+            gateEndTimes.addLast(now)
+            while (gateEndTimes.isNotEmpty() && now - gateEndTimes.first() > GATE_BURST_WINDOW_MS) {
+                gateEndTimes.removeFirst()
+            }
+            if (gateEndTimes.size >= GATE_BURST_LIMIT) {
+                gateEndTimes.clear()
+                onGatePoisoned?.invoke()
+            }
+        }
+    }
+
+    /** Clear the burst counter — the service calls it on every fresh connect. */
+    fun resetGateBurst() {
+        synchronized(gateEndTimes) { gateEndTimes.clear() }
+    }
+
+    /**
+     * Delete the core's cached last-working-gateway files
+     * (aether-*-lastconn.toml, saved next to the identity). The identity
+     * files are kept — deleting those would re-register the device and
+     * Cloudflare rate-limits registration.
+     */
+    fun clearGatewayCache(context: Context) {
+        val dir = File(context.filesDir, DIR_NAME)
+        dir.listFiles()?.forEach { f ->
+            if (f.name.endsWith("-lastconn.toml")) runCatching { f.delete() }
+        }
+    }
+
     /** Parsed lazily on the log thread; ip and country code of the Psiphon exit. */
     private fun parsePsiphonExit(line: String) {
         val m = PSIPHON_EXIT_RE.find(line) ?: return
@@ -174,9 +264,20 @@ class SwiftCoreManager @Inject constructor() {
         h3: Boolean = false,
         scan: Boolean = true,
         psiphon: Boolean = false,
+        // patch 217: how psiphon rides the tunnel — "chain" (--psiphon:
+        // psiphon inside the tunnel, exit = psiphon, bootstrap never meets
+        // the DPI) or "reverse" (--psiphon-reverse: tunnel dialled THROUGH
+        // psiphon, exit = WARP)
+        psiphonMode: String = "chain",
         // preferred exit country, "" = Auto (ISO-2 like "DE"; the core
         // validates two ASCII letters and uppercases them itself)
         psiphonRegion: String = "",
+        // anti-DPI controls (patch 216) — all default OFF, matching the
+        // core's own defaults and PattNG's out-of-the-box behaviour
+        fragment: Boolean = false,
+        noize: Boolean = false,
+        // custom MASQUE SNI; "" = core default (www.cloudflare.com on 2.4.0)
+        sni: String = "",
     ): Boolean {
         if (process != null) return true
         val bin = binary(context) ?: run {
@@ -189,7 +290,9 @@ class SwiftCoreManager @Inject constructor() {
         psiphonReady = false
         logDrivenProgress = false
         tunnelRestored = false
+        psiphonDied = false
         lastStageKey = null
+        synchronized(gateEndTimes) { gateEndTimes.clear() }
         val cfgDir = File(context.filesDir, DIR_NAME).apply { mkdirs() }
         // transport: HTTP/3 (QUIC) when enabled, HTTP/2 otherwise.
         // Psiphon mode always rides HTTP/2: with --psiphon-reverse the core
@@ -198,22 +301,33 @@ class SwiftCoreManager @Inject constructor() {
         val transport = if (h3 && !psiphon) "--h3" else "--h2"
         val args = buildList {
             add(bin.absolutePath)
-            add("--masque"); add(transport); add("--fragment")
-            // The endpoint scan has no part in psiphon mode: the tunnel is
-            // dialled through psiphon, so a scan would measure endpoints from
-            // psiphon's exit and slow the start down (PattNG keeps psiphon
-            // off while scanning too).
+            add("--masque"); add(transport)
+            // ClientHello fragmenting is opt-in since patch 216: with the
+            // flag always on, Hamrah-Aval accepted the h2 control plane but
+            // stalled the data plane 30-60 s in (keepalive-timeout loop).
+            // The core's own default is fragment OFF.
+            if (fragment) add("--fragment")
+            // Endpoint scan and psiphon: in reverse mode the tunnel is
+            // dialled through psiphon, so a scan would measure endpoints
+            // from psiphon's exit and slow the start down. In chain mode
+            // (patch 217) the tunnel dials directly from the network and
+            // the scan behaves exactly like plain Swift, so it is kept —
+            // a fast gateway wins seconds there too.
             if (scan && !psiphon) { add("--scan"); add(scanMode) }
+            if (scan && psiphon && psiphonMode == "chain") { add("--scan"); add(scanMode) }
             if (psiphon) {
-                // --psiphon (chain) puts psiphon INSIDE the tunnel: the socks
-                // inbound still exits via WARP, so the exit country never
-                // applies and user traffic never passes through psiphon.
+                // --psiphon (chain, the default since patch 217) carries
+                // psiphon INSIDE the tunnel: the MASQUE tunnel connects
+                // directly from the network, psiphon bootstraps through it
+                // (its meek round-trips never meet the DPI), and user
+                // traffic leaves from the psiphon exit the region picked.
                 // --psiphon-reverse turns it around: the whole MASQUE tunnel
                 // is dialled THROUGH psiphon, so TCP and UDP/DNS alike leave
-                // from the psiphon region the user picked, while the app
-                // keeps dialling the core's own socks port (the psiphon
-                // relay listener is TCP-only and must never carry tun2socks).
-                add("--psiphon-reverse")
+                // from the psiphon region while the final exit stays WARP.
+                // Either way the app keeps dialling the core's own socks
+                // port (the psiphon relay listener is TCP-only and must
+                // never carry tun2socks).
+                if (psiphonMode == "chain") add("--psiphon") else add("--psiphon-reverse")
                 // aether's --psiphon-region maps to AETHER_PSIPHON_REGION and
                 // only accepts exactly two ASCII letters; anything else would
                 // silently fall back to Auto, so we pre-filter here too
@@ -222,10 +336,27 @@ class SwiftCoreManager @Inject constructor() {
                     add("--psiphon-region"); add(cc)
                 }
             }
-            add("--noize"); add("firewall")
+            if (noize) { add("--noize"); add("firewall") }
             add("-4")
             add("--quick-reconnect")
-            add("--bind"); add("127.0.0.1:$bindPort")
+            // custom MASQUE SNI (patch 216): passed only when the user set
+            // one; empty keeps the core's default (www.cloudflare.com)
+            if (sni.isNotBlank()) { add("--masque-sni"); add(sni) }
+            // patch 220: the --bind proxy ALWAYS exits via WARP. In chain
+            // mode that would silently send user traffic out of the WARP
+            // exit (IR-geolocated on Hamrah-Aval, 2026-11-16) while the
+            // psiphon layer only serves its OWN port (1821) — exactly like
+            // --tor: the usual proxy keeps the WARP exit and a second one
+            // comes out of the nested layer (DOCS.en.md, Tor table). So in
+            // chain mode the core's WARP proxy moves aside and the user's
+            // main port is given to psiphon via --psiphon-bind (v2.4.0):
+            // tun2socks then dials the psiphon exit directly.
+            if (psiphon && psiphonMode == "chain") {
+                add("--bind"); add("127.0.0.1:${bindPort + 2}")
+                add("--psiphon-bind"); add("127.0.0.1:$bindPort")
+            } else {
+                add("--bind"); add("127.0.0.1:$bindPort")
+            }
         }
         return try {
             val pb = ProcessBuilder(args)
@@ -282,10 +413,12 @@ class SwiftCoreManager @Inject constructor() {
                         if (it.contains("tunnel validated")) tunnelRestored = true
                         if (it.contains("MASQUE tunnel ended")) {
                             tunnelRestored = false
+                            noteTunnelEnded()
                             onTunnelEnded?.invoke()
                         }
                         if (!warpReady && it.contains("warp on")) warpReady = true
                         if (!psiphonReady && it.contains("psiphon is ready")) psiphonReady = true
+                        notePsiphonDeath(it)
                     }
                 }
             }.apply { isDaemon = true }.start()
@@ -308,10 +441,12 @@ class SwiftCoreManager @Inject constructor() {
                         if (it.contains("tunnel validated")) tunnelRestored = true
                         if (it.contains("MASQUE tunnel ended")) {
                             tunnelRestored = false
+                            noteTunnelEnded()
                             onTunnelEnded?.invoke()
                         }
                         if (!warpReady && it.contains("warp on")) warpReady = true
                         if (!psiphonReady && it.contains("psiphon is ready")) psiphonReady = true
+                        notePsiphonDeath(it)
                     }
                 }
             }
@@ -466,6 +601,7 @@ class SwiftCoreManager @Inject constructor() {
         tunnelValidated = false
         warpReady = false
         psiphonReady = false
+        psiphonDied = false
         logDrivenProgress = false
         runCatching { p.destroy() }
         Thread {
@@ -499,7 +635,13 @@ class SwiftCoreManager @Inject constructor() {
     private fun appendLog(file: File, line: String) {
         runCatching {
             if (file.length() > MAX_LOG_BYTES) file.delete()
-            file.appendText(line + "\n")
+            // patch 221: the core logs its own timestamps in UTC, which made
+            // log reports confusing (a 18:58 log was actually 22:28 local).
+            // Prefix every line with an Iran-time stamp in brackets; the
+            // core's UTC stamp stays after it for exact comparison.
+            // DateTimeFormatter is thread-safe — both drain threads call this.
+            val stamp = IRAN_LOG_TIME.format(java.time.ZonedDateTime.now(IRAN_ZONE))
+            file.appendText("[$stamp] $line\n")
         }
     }
 
@@ -509,6 +651,9 @@ class SwiftCoreManager @Inject constructor() {
             "psiphon through the tunnel exit: ([0-9a-fA-F:.]+), ([A-Z]{2}) via ([A-Z]{3})"
         )
         private const val TAG = "KuvaSwift"
+        // patch 221: Iran-time stamping for swift.log (see appendLog).
+        private val IRAN_ZONE = java.time.ZoneId.of("Asia/Tehran")
+        private val IRAN_LOG_TIME = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
         /** WARP's own connectivity-check endpoint, used by tunnelProbe. */
         private const val PROBE_HOST = "cp.cloudflare.com"
         private const val LIB_NAME = "libaether.so"
@@ -516,6 +661,11 @@ class SwiftCoreManager @Inject constructor() {
         private const val DIR_NAME = "swift"
         private const val LOG_NAME = "swift.log"
         private const val MAX_LOG_BYTES = 512L * 1024
+
+        // poisoned-gateway burst detection (patch 216): two tunnel ends in
+        // five minutes = the cached edge is being killed mid-session
+        private const val GATE_BURST_LIMIT = 2
+        private const val GATE_BURST_WINDOW_MS = 5L * 60_000L
 
         // Swift progress stage keys (patch 122) — resolved to localized
         // strings in the UI (fa + en); the manager never hardcodes user text

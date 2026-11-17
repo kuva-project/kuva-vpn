@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.KUVAVpn" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- patch 227: window paints the app's real background (#141414)
+             from the first frame — the per-app-locale switch recreates the
+             activity, and without this the recreated window flashed Android's
+             default black before Compose drew its first frame -->
+        <item name="android:windowBackground">@color/window_bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>

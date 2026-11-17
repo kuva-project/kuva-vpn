@@ -66,6 +66,7 @@ class KuvaVpnService : VpnService() {
 
     /** Guards against two tunnel-ended watchdogs running at once. */
     @Volatile private var tunnelWatchdogActive = false
+    @Volatile private var psiphonWatchdogActive = false
     private var pendingReconnect: Job? = null
     /** Active-liveness loop for Swift: probes the tunnel every 20 s. */
     private var healthMonitorJob: Job? = null
@@ -376,7 +377,11 @@ class KuvaVpnService : VpnService() {
                 bindPort = s.socksPort,
                 h3 = s.swiftH3,
                 scan = s.swiftScan,
+                fragment = s.swiftFragment,
+                noize = s.swiftNoize,
+                sni = s.swiftSni,
                 psiphon = s.swiftPsiphon,
+                psiphonMode = s.swiftPsiphonMode,
                 psiphonRegion = s.swiftPsiphonCountry,
             )
         ) {
@@ -414,6 +419,73 @@ class KuvaVpnService : VpnService() {
             connectionRepo.setExitIp(
                 ExitIpInfo(ip = ip, countryCode = cc, country = cc, city = null, isp = "Psiphon")
             )
+        }
+
+        // patch 219: the psiphon layer can die INSIDE a healthy MASQUE
+        // tunnel (real case 2026-11-16: sendSshKeepAlive EOF after 9 min on
+        // Hamrah-Aval). The core keeps running, so onExited never fires and
+        // user traffic silently falls back to the raw WARP exit —
+        // IR-geolocated. Cut the data path IMMEDIATELY so not a byte leaves
+        // via WARP, then give psiphon-tunnel-core 60 s to reconnect itself
+        // ("psiphon is ready" again). Restored -> tun2socks back on, exit
+        // is psiphon again. Not restored -> full core restart; the lastconn
+        // gateway cache is kept, so the tunnel comes up in seconds and only
+        // psiphon bootstraps anew.
+        swift.onPsiphonDied = {
+            serviceScope.launch {
+                if (!connectedNow || userDisconnected || switching) return@launch
+                if (psiphonWatchdogActive) return@launch
+                psiphonWatchdogActive = true
+                try {
+                    android.util.Log.w(
+                        TAG,
+                        "psiphon died inside the tunnel — cutting data path, waiting for its own reconnect"
+                    )
+                    Tun2Socks.stop()
+                    connectionRepo.setState(
+                        ConnectionState.SwiftConnecting(lastProfile?.name ?: "", 40)
+                    )
+                    val deadline = System.currentTimeMillis() + 60_000L
+                    while (System.currentTimeMillis() < deadline) {
+                        if (!connectedNow || userDisconnected || switching) return@launch
+                        if (!swift.isRunning()) break
+                        if (swift.psiphonReady) break
+                        delay(500)
+                    }
+                    if (!connectedNow || userDisconnected || switching) return@launch
+                    if (swift.isRunning() && swift.psiphonReady) {
+                        val tun = tunInterface
+                        if (tun != null) {
+                            android.util.Log.i(
+                                TAG, "psiphon reconnected inside the tunnel — restoring data path"
+                            )
+                            Tun2Socks.start(
+                                context = applicationContext,
+                                vpnInterface = tun,
+                                mtu = settings.current.mtu,
+                                ipv4 = VPN_IPV4,
+                                ipv6 = if (settings.current.ipv6Enabled) VPN_IPV6 else null,
+                                socksPort = settings.current.socksPort,
+                            )
+                            delay(400)
+                            if (Tun2Socks.isRunning()) {
+                                connectionRepo.setState(
+                                    ConnectionState.Connected(lastProfile?.name ?: "", lastProfile?.id)
+                                )
+                                return@launch
+                            }
+                        }
+                    }
+                    android.util.Log.w(TAG, "psiphon did not come back — restarting the core")
+                    connectedNow = false
+                    Tun2Socks.stop()
+                    swift.stop()
+                    closeTun()
+                    scheduleReconnect()
+                } finally {
+                    psiphonWatchdogActive = false
+                }
+            }
         }
 
         // first start includes endpoint discovery; give it a generous window
@@ -456,6 +528,13 @@ class KuvaVpnService : VpnService() {
         // that; a 30 s window timed out and flipped the UI to Connected
         // with no traffic behind it. Give psiphon mode 90 s; other modes
         // keep the original 30 s fallback.
+        // patch 217: chain mode waits for "psiphon is ready" too — there
+        // the psiphon hop sits INSIDE the tunnel and only "psiphon is
+        // ready" proves the exit is really psiphon; without it we would
+        // show Connected while the socks inbound still exits via WARP.
+        // Reverse keeps the plain validated+warp gate: validation cannot
+        // happen before psiphon carries the tunnel there.
+        val chainMode = s.swiftPsiphon && s.swiftPsiphonMode == "chain"
         val holdMs = if (s.swiftPsiphon) 90_000L else 30_000L
         while (true) {
             // user tapped the connect button again during the (up to ~2 min)
@@ -478,7 +557,10 @@ class KuvaVpnService : VpnService() {
                 return
             }
             // both gates from the core's own log — validated + warp on
-            if (swift.tunnelValidated && swift.warpReady) break
+            // (chain: + psiphon ready, so Connected means the psiphon exit)
+            if (swift.tunnelValidated && swift.warpReady &&
+                (!chainMode || swift.psiphonReady)
+            ) break
             val elapsed = System.currentTimeMillis() - holdStart
             if (elapsed >= holdMs) break
             // Event-driven progress (patch 122): re-emit the last REAL pct
@@ -492,7 +574,9 @@ class KuvaVpnService : VpnService() {
                 return
             }
         }
-        if (!(swift.tunnelValidated && swift.warpReady)) {
+        if (!(swift.tunnelValidated && swift.warpReady &&
+                (!chainMode || swift.psiphonReady))
+        ) {
             // gate timed out without a validated tunnel: never claim
             // Connected with no traffic behind it. Seen live on MCI
             // (Hamrah Aval) 2026-11-14: the operator throttles the
@@ -507,6 +591,19 @@ class KuvaVpnService : VpnService() {
                 val graceStart = System.currentTimeMillis()
                 while (System.currentTimeMillis() - graceStart < 10_000L) {
                     if (swift.warpReady || !swift.isRunning()) break
+                    try { Thread.sleep(400) } catch (_: InterruptedException) { return }
+                }
+            }
+            // chain mode: the tunnel itself came up but psiphon inside it
+            // is still bootstrapping — give it one extra 30 s window before
+            // declaring failure (meek on a strained network is slow, yet
+            // it no longer fights the DPI from out here)
+            if (chainMode && !swift.psiphonReady &&
+                swift.tunnelValidated && swift.warpReady && swift.isRunning()
+            ) {
+                val psiStart = System.currentTimeMillis()
+                while (System.currentTimeMillis() - psiStart < 30_000L) {
+                    if (swift.psiphonReady || !swift.isRunning()) break
                     try { Thread.sleep(400) } catch (_: InterruptedException) { return }
                 }
             }
@@ -539,10 +636,14 @@ class KuvaVpnService : VpnService() {
                     connectProfile(profile)
                     return
                 }
-                val why = if (s.swiftPsiphon)
-                    "psiphon did not become ready in time"
-                else
-                    "swift tunnel did not come up — this network may be blocking it"
+                val why = when {
+                    chainMode ->
+                        "psiphon inside the tunnel did not become ready in time"
+                    s.swiftPsiphon ->
+                        "psiphon did not become ready in time"
+                    else ->
+                        "swift tunnel did not come up — this network may be blocking it"
+                }
                 connectionRepo.setState(ConnectionState.Error(why))
                 notifier.notifyError(why)
                 closeTun()
@@ -572,10 +673,27 @@ class KuvaVpnService : VpnService() {
         // core's own reconnect re-validates the tunnel, then go back to
         // Connected. If the core gives up entirely, fall through to the full
         // scheduleReconnect path like a core death.
+        // Poisoned-gateway escape (patch 216): when tunnel ends burst — the
+        // Hamrah-Aval pattern (h2 handshake ok, data plane stalled 30-60 s,
+        // keepalive-timeout loop) — the core would retry the SAME cached
+        // gateway forever. Stop it, wipe the lastconn cache and reconnect:
+        // the fresh process finds no saved gateway and rescans for a new one.
+        swift.onGatePoisoned = {
+            serviceScope.launch {
+                if (!connectedNow || userDisconnected || switching) return@launch
+                android.util.Log.w(TAG, "swift gateway poisoned — stop + wipe cache + rescan")
+                connectedNow = false
+                Tun2Socks.stop()
+                swift.stop()
+                swift.clearGatewayCache(applicationContext)
+                closeTun()
+                scheduleReconnect()
+            }
+        }
         swift.onTunnelEnded = {
             serviceScope.launch {
                 if (!connectedNow || userDisconnected || switching) return@launch
-                if (tunnelWatchdogActive) return@launch
+                if (tunnelWatchdogActive || psiphonWatchdogActive) return@launch
                 tunnelWatchdogActive = true
                 try {
                     android.util.Log.w(TAG, "swift tunnel ended — waiting for the core's own reconnect")
@@ -615,6 +733,9 @@ class KuvaVpnService : VpnService() {
         }
         connectionRepo.setState(ConnectionState.Connected(profile.name, profile.id))
         swiftGateRetries = 0
+        // a successful connect clears the burst counter: the poison pattern
+        // is repeated FAILURES, and one healed reconnect must not carry over
+        if (settings.current.engineMode == "swift") swift.resetGateBurst()
         // Swift: the notification shows the tunnel kind instead of the config
         // name — plain WARP, or WARP + Psiphon when psiphon mode is on
         notifier.notifyConnected(

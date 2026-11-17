@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 
 package com.kuva.vpn.ui.dashboard
 
@@ -13,6 +13,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -109,6 +110,7 @@ fun DashboardScreen(
     val selected by viewModel.selectedProfile.collectAsStateWithLifecycle()
     val swiftPsiphon by viewModel.swiftPsiphon.collectAsStateWithLifecycle()
     val swiftPsiphonCountry by viewModel.swiftPsiphonCountry.collectAsStateWithLifecycle()
+    val swiftPsiphonMode by viewModel.swiftPsiphonMode.collectAsStateWithLifecycle()
 
     // back on the dashboard opens the exit popup: Exit / Keep in background / Cancel
     var showExitDialog by remember { mutableStateOf(false) }
@@ -564,7 +566,7 @@ fun DashboardScreen(
         // ---------- active config card ----------
         // Swift mode has no config to show — a dedicated card replaces it
         if (engineMode == "swift") {
-            SwiftCard(psiphonOn = swiftPsiphon, isFa = isFa)
+            SwiftCard(psiphonOn = swiftPsiphon, psiphonMode = swiftPsiphonMode, isFa = isFa)
         } else {
             ConfigCard(
                 name = selected?.name,
@@ -747,7 +749,7 @@ private fun StatCard(
 }
 
 @Composable
-private fun SwiftCard(psiphonOn: Boolean, isFa: Boolean) {
+private fun SwiftCard(psiphonOn: Boolean, psiphonMode: String, isFa: Boolean) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -771,9 +773,17 @@ private fun SwiftCard(psiphonOn: Boolean, isFa: Boolean) {
                 stringResource(R.string.swift_row_route),
                 if (isFa) {
                     // RTL: the arrow points left in Persian, right in English
-                    if (psiphonOn) "وارپ ← سایفون" else "وارپ"
+                    when {
+                        !psiphonOn -> "وارپ"
+                        psiphonMode == "chain" -> "وارپ ← سایفون"
+                        else -> "سایفون ← وارپ"
+                    }
                 } else {
-                    if (psiphonOn) "WARP → Psiphon" else "WARP"
+                    when {
+                        !psiphonOn -> "WARP"
+                        psiphonMode == "chain" -> "WARP → Psiphon"
+                        else -> "Psiphon → WARP"
+                    }
                 },
             )
         }
@@ -886,7 +896,12 @@ private fun ConfigCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                Text(name, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(
+                    name,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, repeatDelayMillis = 4000),
+                )
                 Spacer(Modifier.height(10.dp))
                 InfoRow(stringResource(R.string.protocol), protocol ?: "—")
                 InfoRow(stringResource(R.string.address), address ?: "—")
@@ -930,6 +945,7 @@ private fun ExitTile(
                     style = MaterialTheme.typography.bodyMedium.copy(
                         textDirection = latinDir(location ?: "")),
                     maxLines = 1,
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, repeatDelayMillis = 4000),
                 )
             }
         }
@@ -1087,7 +1103,8 @@ private fun InfoRow(label: String, value: String) {
         Text(label, style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(90.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium.copy(
-            textDirection = latinDir(value)), maxLines = 1)
+            textDirection = latinDir(value)), maxLines = 1,
+            modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, repeatDelayMillis = 4000))
     }
 }
 

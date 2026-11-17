@@ -14,6 +14,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -90,6 +91,25 @@ class SettingsViewModel @Inject constructor(
     fun setShowNotifSpeed(b: Boolean) = viewModelScope.launch { repo.setShowNotifSpeed(b) }
     fun setSwiftH3(b: Boolean) = viewModelScope.launch { repo.setSwiftH3(b) }
     fun setSwiftPsiphon(b: Boolean) = viewModelScope.launch { repo.setSwiftPsiphon(b) }
+
+    /**
+     * patch 217: pick the psiphon chain direction in the Swift card.
+     * A live swift connection restarts so the new flags apply right away,
+     * mirroring the dashboard toggle behaviour.
+     */
+    fun setSwiftPsiphonMode(mode: String) = viewModelScope.launch {
+        if (repo.settings.first().swiftPsiphonMode == mode) return@launch
+        repo.setSwiftPsiphonMode(mode)
+        val st = connRepo.state.value
+        if (st is ConnectionState.Connected || st is ConnectionState.SwiftConnecting) {
+            vpnControl.requestStop(context)
+            kotlinx.coroutines.delay(1200)
+            vpnControl.requestStart(context)
+        }
+    }
+    fun setSwiftFragment(b: Boolean) = viewModelScope.launch { repo.setSwiftFragment(b) }
+    fun setSwiftNoize(b: Boolean) = viewModelScope.launch { repo.setSwiftNoize(b) }
+    fun setSwiftSni(v: String) = viewModelScope.launch { repo.setSwiftSni(v) }
 
     fun setSwiftPsiphonCountry(cc: String) =
         viewModelScope.launch { repo.setSwiftPsiphonCountry(cc) }

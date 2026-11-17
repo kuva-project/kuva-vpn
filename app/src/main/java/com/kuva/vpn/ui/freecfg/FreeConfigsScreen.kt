@@ -1,6 +1,9 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.kuva.vpn.ui.freecfg
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Image
@@ -50,6 +53,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kuva.vpn.R
@@ -230,16 +234,9 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
             Spacer(Modifier.height(6.dp))
         }
 
-        // list states: after a ping (or search) run ends, jump to the top so
-        // the fastest config is visible without manual scrolling
+        // list states (patch 231 below owns their scroll behaviour)
         val searchListState = rememberLazyListState()
         val vaultListState = rememberLazyListState()
-        LaunchedEffect(progress.running) {
-            if (!progress.running) {
-                searchListState.scrollToItem(0)
-                vaultListState.scrollToItem(0)
-            }
-        }
 
         // run flags for BOTH panes: the vault ping button also turns green
         // with a spinner while its run is active (user request #4)
@@ -250,6 +247,42 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
         // ping runs can never execute in parallel (they would slow each other)
         val myPing = pinging && progress.runOwner == "search"
         val vaultPing = pinging && progress.runOwner == "vault"
+        // patch 234: keys must ALSO stay lifted for a short settle window
+        // after the run ends — restoring keys immediately re-anchors the view
+        // to a row that is still moving (the last ~1 s sort batch), which
+        // dragged the user off the top right as the run finished
+        var vaultSettle by remember { mutableStateOf(false) }
+        var searchSettle by remember { mutableStateOf(false) }
+        // patch 233: pressing a pane's ping button jumps to the top ONCE.
+        // During the run the pane's row keys are LIFTED (see items(...) below):
+        // without keys LazyColumn keeps the VIEW POSITION instead of anchoring
+        // to a specific row, so the user stays at the top while the live sort
+        // (patch 231 ViewModel) reshuffles rows beneath their eyes. All the
+        // follow/snapshot machinery of 226/231/232 is gone — key anchoring was
+        // exactly what dragged the view away; those patches fought the
+        // symptom, not the cause. Scrolling during a run is simply free.
+        LaunchedEffect(vaultPing) {
+            if (vaultPing) {
+                vaultSettle = true
+                vaultListState.scrollToItem(0)
+            } else if (vaultSettle) {
+                // run just ended: let the last sort batch settle, then snap
+                // to row 0 (lowest ping) before keys come back
+                delay(1000)
+                vaultListState.scrollToItem(0)
+                vaultSettle = false
+            }
+        }
+        LaunchedEffect(myPing) {
+            if (myPing) {
+                searchSettle = true
+                searchListState.scrollToItem(0)
+            } else if (searchSettle) {
+                delay(1000)
+                searchListState.scrollToItem(0)
+                searchSettle = false
+            }
+        }
         if (tab == 0) {
             // ================= SEARCH PANE =================
             // ---- action area (option C): one neon-outlined Search button only;
@@ -294,7 +327,12 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                             )
                         }
                     }
-                    items(searchProfiles, key = { it.id }) { p ->
+                    // patch 233: no keys during THIS pane's ping run — the
+                    // view then keeps its position (top) instead of following
+                    // a specific row while the live sort reshuffles
+                    val searchKeys: ((Profile) -> Any)? =
+                        if (myPing || searchSettle) null else { p -> p.id }
+                    items(searchProfiles, key = searchKeys) { p ->
                         // display-only row: no buttons, no swipe (user request)
                         SearchRow(profile = p)
                     }
@@ -423,7 +461,10 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                         )
                     }
                 }
-                items(vaultProfiles, key = { it.id }) { p ->
+                // patch 233: no keys during THIS pane's ping run (see above)
+                val vaultKeys: ((Profile) -> Any)? =
+                    if (vaultPing || vaultSettle) null else { p -> p.id }
+                items(vaultProfiles, key = vaultKeys) { p ->
                     SwipeBothWaysRow(
                         onDelete = { viewModel.delete(p.id) },
                         onPing = { viewModel.pingSingle(p.id) },
@@ -473,7 +514,12 @@ private fun SearchRow(profile: Profile) {
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(profile.name, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(
+                    profile.name,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, repeatDelayMillis = 4000),
+                )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     "${profile.protocol.name} • ${profile.displayAddress}",
@@ -733,16 +779,26 @@ fun ConfigRow(
         Row(Modifier.height(60.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             ProtocolRibbon(profile.protocol.name)
             Column(Modifier.weight(1f)) {
-                Text(profile.name, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                    style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    profile.name,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, repeatDelayMillis = 4000),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (pinging) {
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        // patch 225: fixed 52.dp box keeps the ping column
+                        // aligned across rows even while some rows still spin
+                        Box(Modifier.width(52.dp)) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        }
                     } else Text(
                         Formatters.ping(profile.pingMs),
+                        modifier = Modifier.width(52.dp),   // patch 225: fixed ping column
                         style = MaterialTheme.typography.labelSmall.copy(
                             textDirection = latinDir(Formatters.ping(profile.pingMs))),
-color = pingColor(profile.pingMs),
+                        color = pingColor(profile.pingMs),
                     )
                     if (showSource) profile.source?.let {
                         Spacer(Modifier.width(8.dp))
