@@ -202,6 +202,8 @@ class KuvaVpnService : VpnService() {
         lastProfile = profile
         userDisconnected = false
         val s = settings.current
+        // patch 236: session start marker in swift.log (engine + profile)
+        swift.serviceLog("connect requested — engine=${s.engineMode}, profile=${profile.name}")
         // Kuva Swift: the bundled MASQUE core replaces Xray entirely; the
         // TUN -> SOCKS pipeline below is identical for both engines.
         if (s.engineMode == "swift") {
@@ -441,6 +443,7 @@ class KuvaVpnService : VpnService() {
                         TAG,
                         "psiphon died inside the tunnel — cutting data path, waiting for its own reconnect"
                     )
+                    swift.serviceLog("psiphon died inside the tunnel — waiting for its own reconnect")
                     Tun2Socks.stop()
                     connectionRepo.setState(
                         ConnectionState.SwiftConnecting(lastProfile?.name ?: "", 40)
@@ -715,6 +718,7 @@ class KuvaVpnService : VpnService() {
                         )
                     } else {
                         android.util.Log.w(TAG, "swift tunnel not restored — scheduling reconnect")
+                    swift.serviceLog("tunnel not restored within deadline — scheduling full reconnect")
                         connectedNow = false
                         Tun2Socks.stop()
                         closeTun()
@@ -732,6 +736,9 @@ class KuvaVpnService : VpnService() {
             it.copy(connectedSinceEpochMs = System.currentTimeMillis())
         }
         connectionRepo.setState(ConnectionState.Connected(profile.name, profile.id))
+        // patch 236: completion marker — probe streaks / watchdog lines
+        // before this belong to the connect attempt, after it to the session
+        swift.serviceLog("connect completed — Connected (engine=${settings.current.engineMode})")
         swiftGateRetries = 0
         // a successful connect clears the burst counter: the poison pattern
         // is repeated FAILURES, and one healed reconnect must not carry over
@@ -869,6 +876,9 @@ class KuvaVpnService : VpnService() {
                     return
                 }
                 android.util.Log.i(TAG, "network available: $network")
+                // patch 236: physical-network switch is a common cause of
+                // mid-session drops — record it in swift.log
+                swift.serviceLog("network changed — reconnect scheduled")
                 scheduleReconnect()
             }
             override fun onLost(network: Network) {
@@ -896,6 +906,8 @@ class KuvaVpnService : VpnService() {
     private fun handleNetworkLoss() {
         if (!connectedNow || userDisconnected) return
         connectedNow = false
+        // patch 236: network loss was only in logcat, never in swift.log
+        swift.serviceLog("network lost — stopping and reconnecting")
         serviceScope.launch {
             connectionRepo.setState(ConnectionState.Connecting(lastProfile?.name ?: "", lastProfile?.id))
             statsCollector.stop()
@@ -910,7 +922,10 @@ class KuvaVpnService : VpnService() {
     /**
      * Active health monitor for Swift: every 20 s sends a real end-to-end
      * probe through the tunnel (local SOCKS port -> cp.cloudflare.com
-     * /generate_204, WARP's own health endpoint). Two consecutive failures
+     * /generate_204, WARP's own health endpoint). Three consecutive failures (patch 238: two was too
+     * sensitive — the 2026-11-17 swift.log shows six harmless streak=1
+     * blips in 39 min on a healthy tunnel, and two of them landed back
+     * to back)
      * mean the tunnel died silently — no log line, no process exit — which
      * neither onExited nor onTunnelEnded can see. Recovery reuses the exact
      * log-line-watchdog path: honest SwiftConnecting, wait for the core's
@@ -920,38 +935,81 @@ class KuvaVpnService : VpnService() {
      */
     private suspend fun runSwiftHealthMonitor() {
         var failStreak = 0
+        // patch 240+241: the health-endpoint challenge is informational only.
+        // An IR-exit WARP session can 403 every probe and alternate 204/403,
+        // so "once per episode" still logged ~30 lines a night (2026-11-18
+        // swift.log). Throttle: at most one line per 10 minutes.
+        var lastChallengeLogAt = 0L
+        val challengeLogIntervalMs = 10 * 60_000L
         while (connectedNow && !userDisconnected && !switching) {
             delay(20_000L)
             if (!connectedNow || userDisconnected || switching) return
             // the log-line watchdog is already driving recovery — stand down
             if (tunnelWatchdogActive) continue
-            if (swift.tunnelProbe(settings.current.socksPort, 8_000)) {
+            val reason = swift.tunnelProbeReason(settings.current.socksPort, 8_000)
+            if (reason == null) {
                 failStreak = 0
                 continue
             }
+            if (reason.startsWith("endpoint challenged")) {
+                // tunnel carries data — only the health endpoint is challenged
+                failStreak = 0
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - lastChallengeLogAt >= challengeLogIntervalMs) {
+                    lastChallengeLogAt = now
+                    android.util.Log.i(TAG, "swift probe challenged but tunnel alive")
+                    swift.serviceLog("probe challenged ($reason) — tunnel alive, ignoring")
+                }
+                continue
+            }
             failStreak++
-            android.util.Log.w(TAG, "swift health probe failed (streak=$failStreak)")
-            if (failStreak < 2) continue
+            android.util.Log.w(TAG, "swift health probe failed (streak=$failStreak): $reason")
+            swift.serviceLog("health probe failed (streak=$failStreak, reason: $reason)")
+            if (failStreak < 3) continue
             tunnelWatchdogActive = true
             try {
                 android.util.Log.w(TAG, "swift tunnel dead silently — waiting for the core's own reconnect")
+                swift.serviceLog("tunnel declared dead (streak>=3) — waiting for the core's own reconnect")
                 // key the wait below on the core's NEXT "tunnel validated"
                 swift.resetTunnelRestoredLatch()
                 connectionRepo.setState(
                     ConnectionState.SwiftConnecting(lastProfile?.name ?: "", 35)
                 )
                 val deadline = System.currentTimeMillis() + 180_000L
+                var lastRecoveryProbe = 0L
                 while (System.currentTimeMillis() < deadline) {
                     if (!connectedNow || userDisconnected || switching) return
                     if (!swift.isRunning()) break
                     if (swift.tunnelRestored) break
+                    // patch 238: the core NEVER re-validates a tunnel it was
+                    // not told to rebuild — waiting for "tunnel validated" on
+                    // a live tunnel deadlocks until the deadline (the exact
+                    // stuck "Searching for route..." state). Probe the tunnel
+                    // itself: alive = false alarm, go straight back.
+                    val nowMs = System.currentTimeMillis()
+                    if (nowMs - lastRecoveryProbe >= 5_000L) {
+                        lastRecoveryProbe = nowMs
+                        if (swift.tunnelAlive(settings.current.socksPort, 8_000)) {
+                            android.util.Log.i(TAG, "swift false alarm — tunnel is alive")
+                            swift.serviceLog("false alarm — tunnel is alive, back to Connected")
+                            failStreak = 0
+                            connectionRepo.setState(
+                                ConnectionState.Connected(lastProfile?.name ?: "", lastProfile?.id)
+                            )
+                            return
+                        }
+                    }
                     delay(500)
                 }
                 if (!connectedNow || userDisconnected || switching) return
-                if (swift.isRunning() && swift.tunnelRestored &&
-                    swift.tunnelProbe(settings.current.socksPort, 8_000)
+                // patch 238: last chance before the full reconnect — if the
+                // tunnel answers now, the death verdict was wrong; never cut
+                // a working connection at the deadline
+                if (swift.isRunning() &&
+                    swift.tunnelAlive(settings.current.socksPort, 8_000)
                 ) {
-                    android.util.Log.i(TAG, "swift tunnel restored after silent death — back to Connected")
+                    android.util.Log.i(TAG, "swift tunnel alive at watchdog deadline — back to Connected")
+                    swift.serviceLog("tunnel alive at watchdog deadline — back to Connected")
                     failStreak = 0
                     connectionRepo.setState(
                         ConnectionState.Connected(lastProfile?.name ?: "", lastProfile?.id)
@@ -996,6 +1054,9 @@ class KuvaVpnService : VpnService() {
 
     private fun disconnect() {
         userDisconnected = true
+        // patch 236: the end of a session was invisible in swift.log —
+        // reports could not tell a user tap from a network drop.
+        swift.serviceLog("user disconnect requested — stopping VPN")
         swiftGateRetries = 0
         pendingReconnect?.cancel()
         pendingReconnect = null

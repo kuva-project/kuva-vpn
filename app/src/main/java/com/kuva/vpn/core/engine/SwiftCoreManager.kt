@@ -30,6 +30,12 @@ class SwiftCoreManager @Inject constructor() {
     @Volatile
     private var process: Process? = null
 
+    // patch 236: handle of the shared swift.log, captured in start() so the
+    // service can append its own decisions ([service] lines) to the SAME
+    // file the core writes — one file tells the whole session's story.
+    @Volatile
+    private var logFile: java.io.File? = null
+
     /** Invoked when the core process dies. Set by the VPN service. */
     @Volatile
     var onExited: (() -> Unit)? = null
@@ -294,6 +300,7 @@ class SwiftCoreManager @Inject constructor() {
         lastStageKey = null
         synchronized(gateEndTimes) { gateEndTimes.clear() }
         val cfgDir = File(context.filesDir, DIR_NAME).apply { mkdirs() }
+        logFile = File(cfgDir, LOG_NAME)
         // transport: HTTP/3 (QUIC) when enabled, HTTP/2 otherwise.
         // Psiphon mode always rides HTTP/2: with --psiphon-reverse the core
         // dials the tunnel through psiphon on an http/2 carrier and sets
@@ -481,7 +488,7 @@ class SwiftCoreManager @Inject constructor() {
      * back within the timeout; any hiccup (connect refusal, SOCKS error,
      * read timeout) is a failure.
      */
-    fun tunnelProbe(socksPort: Int, timeoutMs: Int): Boolean {
+    fun tunnelProbeReason(socksPort: Int, timeoutMs: Int): String? {
         var sock: Socket? = null
         return try {
             sock = Socket()
@@ -494,7 +501,7 @@ class SwiftCoreManager @Inject constructor() {
             val greet = ByteArray(2)
             if (readFully(inp, greet) != 2 ||
                 greet[0] != 0x05.toByte() || greet[1] != 0x00.toByte()
-            ) return false
+            ) return "socks5 greeting failed"
             // CONNECT cp.cloudflare.com:80 by domain name (ATYP=3)
             val host = PROBE_HOST.toByteArray(Charsets.US_ASCII)
             val req = ByteArray(5 + host.size + 2)
@@ -505,19 +512,19 @@ class SwiftCoreManager @Inject constructor() {
             out.write(req); out.flush()
             // reply: VER REP RSV ATYP + variable-length BND.ADDR + BND.PORT
             val head4 = ByteArray(4)
-            if (readFully(inp, head4) != 4 || head4[1] != 0x00.toByte()) return false
+            if (readFully(inp, head4) != 4 || head4[1] != 0x00.toByte()) return "socks5 connect refused"
             val addrLen = when (head4[3].toInt()) {
                 0x01 -> 4
                 0x03 -> {
                     val l = ByteArray(1)
-                    if (readFully(inp, l) != 1) return false
+                    if (readFully(inp, l) != 1) return "socks5 reply truncated"
                     l[0].toInt() and 0xFF
                 }
                 0x04 -> 16
-                else -> return false
+                else -> return "socks5 bad address type"
             }
             val tail = ByteArray(addrLen + 2)
-            if (readFully(inp, tail) != tail.size) return false
+            if (readFully(inp, tail) != tail.size) return "socks5 reply truncated"
             // the real probe: 204 means the tunnel actually carries data
             val http = ("HEAD /generate_204 HTTP/1.1\r\n" +
                 "Host: $PROBE_HOST\r\n" +
@@ -525,12 +532,40 @@ class SwiftCoreManager @Inject constructor() {
             out.write(http); out.flush()
             val buf = ByteArray(32)
             val n = inp.read(buf)
-            n > 0 && String(buf, 0, n, Charsets.US_ASCII).startsWith("HTTP/1.1 204")
+            if (n <= 0) return "no http answer (tunnel may be stalled)"
+            val first = String(buf, 0, n, Charsets.US_ASCII)
+            if (first.startsWith("HTTP/1.1 204")) return null
+            // patch 240: ANY valid HTTP answer proves the tunnel carries data.
+            // On IR-exit WARP, Cloudflare's own health endpoint sometimes
+            // answers 403 Forbidden (challenge) while normal traffic flows —
+            // the 2026-11-18 swift.log shows 13 such "failures" on a healthy
+            // tunnel. Report it as "endpoint challenged" so the caller can
+            // treat it as alive without losing the detail.
+            if (first.startsWith("HTTP/")) return "endpoint challenged: $first"
+            return "unexpected answer: $first"
         } catch (t: Throwable) {
-            false
+            t.javaClass.simpleName + ": " + (t.message ?: "probe error")
         } finally {
             runCatching { sock?.close() }
         }
+    }
+
+    /**
+     * Boolean wrapper over tunnelProbeReason (patch 238) — true only when a
+     * full HTTP 204 answer came back within the timeout.
+     */
+    fun tunnelProbe(socksPort: Int, timeoutMs: Int): Boolean =
+        tunnelProbeReason(socksPort, timeoutMs) == null
+
+    /**
+     * Liveness only (patch 240): true when the tunnel carried ANY data —
+     * a clean 204 or any HTTP answer (e.g. a 403 challenge from the health
+     * endpoint). False only for real failures: timeouts, refusals, broken
+     * handshakes, no answer.
+     */
+    fun tunnelAlive(socksPort: Int, timeoutMs: Int): Boolean {
+        val r = tunnelProbeReason(socksPort, timeoutMs)
+        return r == null || r.startsWith("endpoint challenged")
     }
 
     /** Exact SOCKS5 reply-read: blocks until buf is full or EOF. */
@@ -629,6 +664,24 @@ class SwiftCoreManager @Inject constructor() {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * patch 236: service-side logging into swift.log. The core only logs
+     * its own view; decisions of the app layer (user disconnect, connect
+     * requests, health-probe failures, network changes) were invisible,
+     * which made incident reports (2026-11-17 dashboard bug) impossible to
+     * close from the log file alone. Prefix "[service]" separates app-layer
+     * lines from core lines; same Iran-time stamp format as appendLog.
+     * Never throws — logging must not break the connection path.
+     */
+    fun serviceLog(line: String) {
+        runCatching {
+            val f = logFile ?: return
+            if (f.length() > MAX_LOG_BYTES) f.delete()
+            val stamp = IRAN_LOG_TIME.format(java.time.ZonedDateTime.now(IRAN_ZONE))
+            f.appendText("[$stamp] [service] $line\n")
         }
     }
 

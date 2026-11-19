@@ -32,6 +32,15 @@ class KuvaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // patch 262: set the dark-only theme ONCE here, synchronously, before
+        // any Activity exists — applyDayNight then finds zero activities to
+        // recreate. Every later applyTheme call hits the patch-261 guard
+        // (mode already YES) and becomes a no-op, so NO recreation can ever
+        // happen during the app's lifetime — the cold-start jump ("پرش رو به
+        // بالا") is structurally gone.
+        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(
+            androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
+        )
         installCrashHandler()
         // Every fresh process start (user pressed Exit, swiped the app away,
         // or the system killed it in the background) wipes stored ping/speed
@@ -62,17 +71,6 @@ class KuvaApplication : Application() {
             runCatching {
                 updateAvailable.value =
                     updater.check(BuildConfig.VERSION_NAME).updateAvailable
-            }
-        }
-        // Fresh start always boots on the Xray engine: the engine switch is a
-        // per-session choice, not a persisted preference. Psiphon is
-        // per-session too — both the toggle and the exit country reset
-        // (OFF + Auto) on every fresh app start.
-        appScope.launch {
-            runCatching {
-                settings.setEngineMode("xray")
-                settings.setSwiftPsiphon(false)
-                settings.setSwiftPsiphonCountry("")
             }
         }
         appScope.launch {
@@ -126,6 +124,17 @@ class KuvaApplication : Application() {
             private set
 
         fun applyTheme(mode: String) {
+            // patch 261: this app is dark-only (every mode maps to
+            // MODE_NIGHT_YES). Calling setDefaultNightMode again while it is
+            // already YES still ends up in Activity.recreate(), which fired
+            // mid-draw on cold start and made the whole UI jump up for a
+            // frame ("پرش رو به بالا"). Skip entirely when the requested
+            // mode is already active — the first call at process start sets
+            // YES once, every later call (KuvaApplication, MainActivity,
+            // SettingsViewModel) becomes a no-op.
+            if (AppCompatDelegate.getDefaultNightMode()
+                == AppCompatDelegate.MODE_NIGHT_YES
+            ) return
             // setDefaultNightMode ends up calling Activity.recreate(), which
             // must run on the main thread. Callers fire this from coroutine
             // workers (Application onCreate, SettingsViewModel) and that
@@ -133,11 +142,7 @@ class KuvaApplication : Application() {
             // the main looper makes it safe from any thread.
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 AppCompatDelegate.setDefaultNightMode(
-                    when (mode) {
-                        "light" -> AppCompatDelegate.MODE_NIGHT_YES  // light palette removed — dark only
-                        "dark" -> AppCompatDelegate.MODE_NIGHT_YES
-                        else -> AppCompatDelegate.MODE_NIGHT_YES
-                    }
+                    AppCompatDelegate.MODE_NIGHT_YES  // dark only — patch 261
                 )
             }
         }

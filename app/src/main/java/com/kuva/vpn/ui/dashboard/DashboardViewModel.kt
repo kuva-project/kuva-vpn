@@ -49,9 +49,12 @@ class DashboardViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /** dashboard engine switch: "xray" (configs) vs "swift" (configless) */
+    // patch 251: initial value must match the forced default (KuvaApplication
+    // forces "swift" on every start) — the old "xray" placeholder made the
+    // switch flash Xray for a frame before DataStore loaded (startup jump)
     val engineMode: StateFlow<String> = settings.settings
         .map { it.engineMode }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "xray")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "swift")
 
     val swiftPsiphon: StateFlow<Boolean> = settings.settings
         .map { it.swiftPsiphon }

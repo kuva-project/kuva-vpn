@@ -189,7 +189,10 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
         Spacer(Modifier.height(8.dp))
 
         // ---- live progress line, shown ONLY while search/ping is running ----
-        if (progress.running) {
+        // patch 268: the two tabs are separate worlds — the panel belongs to
+        // the tab that STARTED the run (search=0, vault=1, mine=other screen)
+        val ownerTab = when (progress.runOwner) { "search" -> 0; "vault" -> 1; else -> -1 }
+        if (progress.running && tab == ownerTab) {
             if (progress.phase == "ping") {
                 // part 1: plain remaining text; part 2: (alive green / dead red)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -232,6 +235,57 @@ fun FreeConfigsScreen(viewModel: FreeConfigViewModel = hiltViewModel()) {
                 )
             }
             Spacer(Modifier.height(6.dp))
+        } else if (progress.finished && tab == ownerTab) {
+            // patch 266/268: the final ping stats STAY on screen after the run
+            // ends — but only in the tab that ran the ping
+            // (until the user moves the alive configs to the vault, which wipes
+            // the whole panel via resetProgress) — previously they vanished the
+            // instant running became false and only the search summary survived
+            if (progress.alive > 0 || progress.dead > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.ping_done),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "  (",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "${progress.alive}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = com.kuva.vpn.ui.theme.StatusGreen,
+                    )
+                    Text(
+                        " / ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "${progress.dead}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = com.kuva.vpn.ui.theme.StatusRed,
+                    )
+                    Text(
+                        ")",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+            if (progress.newImported > 0 || progress.skippedDead > 0) {
+                // patch 264: honest end-of-search summary — what was actually
+                // ADDED after dedupe, and how many known-dead servers were rejected
+                Text(
+                    text = stringResource(R.string.search_result, progress.newImported, progress.skippedDead),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+            }
         }
 
         // list states (patch 231 below owns their scroll behaviour)

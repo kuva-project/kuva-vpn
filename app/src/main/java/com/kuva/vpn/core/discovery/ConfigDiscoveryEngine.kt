@@ -32,11 +32,29 @@ class ConfigDiscoveryEngine @Inject constructor(
         .followRedirects(true)
         .build()
 
+    // patch 264: dead-server tombstone memory + randomized scan order
+    private val rng = java.security.SecureRandom()
+    @Volatile private var skipIdentities: Set<String> = emptySet()
+
+    /** Search consults this set: a server that ever failed a ping is never
+     *  re-imported, no matter which source or cosmetic rotation it comes from. */
+    fun setDeadIdentities(ids: Set<String>) { skipIdentities = ids }
+
+    /** Server identity for dead-server tombstones: protocol+address+port+
+     *  secret+method+network+security. Cosmetics (sni/host/path/sid/fp) are
+     *  deliberately excluded — panels and channels rotate them constantly,
+     *  so the same server from any source must map to ONE identity. */
+    fun serverIdentityOf(p: Profile): String = listOf(
+        p.protocol.name, p.address.lowercase(), p.port,
+        p.uuid, p.method, p.network.name, p.security.name,
+    ).joinToString("|")
+
     data class SourceResult(
         val source: String,
         val found: Int,
         val valid: Int,
         val error: String?,
+        val skippedDead: Int = 0,
     )
 
     data class DiscoveryReport(
@@ -69,7 +87,19 @@ class ConfigDiscoveryEngine @Inject constructor(
             // perSource counter: quota mode ignores the global cap so small
             // sources still deliver their share before the cap kicks in later
             var perSource = 0
-            for (line in raw.lineSequence()) {
+            var skippedDead = 0
+            // patch 264: randomized scan order — every run starts at a random
+            // offset into the source's pool, so repeated searches surface
+            // different halves of large sources (AzadNet ~900, SoliSpirit ~880)
+            val lines = raw.lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && it.contains("://") }
+                .toList()
+            val ordered = if (lines.size > 1) {
+                val start = rng.nextInt(lines.size)
+                lines.drop(start) + lines.take(start)
+            } else lines
+            for (line in ordered) {
                 if (isCancelled()) break
                 // Quota: keep scanning this source while it still owes
                 // configs (perSource < minFromSource), but the global cap of
@@ -78,10 +108,7 @@ class ConfigDiscoveryEngine @Inject constructor(
                 // after 8 LINES — most quota was never delivered and the
                 // search came back nearly empty.)
                 if (into.size >= maxTotal) break
-                val trimmed = line.trim()
-                if (trimmed.isEmpty()) continue
-                if (!trimmed.contains("://")) continue
-                val parsed = runCatching { shareLinkParser.parse(trimmed) }.getOrDefault(emptyList())
+                val parsed = runCatching { shareLinkParser.parse(line) }.getOrDefault(emptyList())
                 for (p0 in parsed) {
                     if (into.size >= maxTotal) break
                     val p = p0.copy(
@@ -93,6 +120,9 @@ class ConfigDiscoveryEngine @Inject constructor(
                     )
                     val fp = p.fingerprintHash ?: continue
                     if (existingFingerprints.contains(fp) || into.containsKey(fp)) continue
+                    // patch 264: tombstone check — dead servers never re-enter
+                    val sid = serverIdentityOf(p)
+                    if (sid in skipIdentities) { skippedDead++; continue }
                     into[fp] = p
                     scanned++
                     perSource++
@@ -117,13 +147,14 @@ class ConfigDiscoveryEngine @Inject constructor(
                     )
                     val fp = p.fingerprintHash ?: continue
                     if (existingFingerprints.contains(fp) || into.containsKey(fp)) continue
+                    if (serverIdentityOf(p) in skipIdentities) { skippedDead++; continue }
                     into[fp] = p
                     scanned++
                     perSource++
                     onFound(into.size)
                 }
             }
-            SourceResult(source.name, scanned, scanned, null)
+            SourceResult(source.name, scanned, scanned, null, skippedDead)
         } catch (e: Exception) {
             Log.w(TAG, "source ${source.name} failed: ${e.message}")
             SourceResult(source.name, 0, 0, e.message ?: "failed")

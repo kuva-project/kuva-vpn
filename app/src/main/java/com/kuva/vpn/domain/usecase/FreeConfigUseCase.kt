@@ -26,6 +26,7 @@ class FreeConfigUseCase @Inject constructor(
     private val discovery: ConfigDiscoveryEngine,
     private val tester: ConfigTester,
     private val subDao: SubscriptionDao,   // for undo-aware subscription delete/restore
+    private val settings: com.kuva.vpn.data.settings.SettingsRepository, // patch 264: dead-server tombstones
 ) {
     // ---------- discovery ----------
     data class DiscoveryProgress(
@@ -37,6 +38,7 @@ class FreeConfigUseCase @Inject constructor(
         val found: Int = 0,
         val valid: Int = 0,
         val newImported: Int = 0,
+        val skippedDead: Int = 0,        // patch 264: known-dead servers rejected by tombstone memory
         val base: Int = 0,               // configs already in the list when the run started
         val runOwner: String = "",       // which pane started the run: "search"|"vault"|"mine"
         val alive: Int = 0,              // configs that got a ping (ms >= 0) this run
@@ -48,6 +50,11 @@ class FreeConfigUseCase @Inject constructor(
     )
 
     private val _progress = MutableStateFlow(DiscoveryProgress())
+
+    /** patch 266: wipe the progress panel — ping stats stay visible after a
+     *  ping run until the user moves the alive configs to the vault, then
+     *  this clears the whole panel (stats + search summary). */
+    fun resetProgress() { _progress.value = DiscoveryProgress() }
     val progress: StateFlow<DiscoveryProgress> = _progress.asStateFlow()
 
     /** Target number of UNIQUE configs to add per search run. */
@@ -93,16 +100,28 @@ class FreeConfigUseCase @Inject constructor(
             DefaultSources.SubUrl("[2]", "https://raw.githubusercontent.com/peasoft/NoMoreWalls/master/list.txt")),
         SourceDef(3, "V2rayCollector", "GitHub raw mix - untested",
             DefaultSources.RawUrl("[3]", "https://raw.githubusercontent.com/MhdiTaheri/V2rayCollector/main/sub/mix")),
-        SourceDef(4, "Au1rxx", "HTTP-tested hourly, top ~150 only",
+        SourceDef(4, "Au1rxx", "HTTP-tested hourly pool (~1.5k)",
             DefaultSources.SubUrl("[4]", "https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt")),
         SourceDef(5, "NodesRadar", "Tested every 6h, stability-ranked",
             DefaultSources.SubUrl("[5]", "https://radarhub.top/v2ray.txt")),
         SourceDef(6, "HamedCode", "TCP-checked every 4h before publish",
             DefaultSources.RawUrl("[6]", "https://raw.githubusercontent.com/hamedcode/port-based-v2ray-configs/main/sub/port_443.txt")),
-        SourceDef(7, "0xRadikal", "Top 100, refreshed every 15m",
-            DefaultSources.SubUrl("[7]", "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/top100.txt")),
+        // patch 265: filled the gap of removed 0xRadikal with the HTTP-tested source
+        SourceDef(7, "NoahGCP", "Real-HTTP-tested every 30m (~700)",
+            DefaultSources.RawUrl("[7]", "https://raw.githubusercontent.com/noahclanman/free-xray-gcp/main/output/all/configs.txt")),
         SourceDef(8, "SoliSpirit", "Large rotating pool (~880 configs)",
             DefaultSources.RawUrl("[8]", "https://raw.githubusercontent.com/SoliSpirit/v2ray-configs/main/Subscriptions/Sub10.txt")),
+        // patch 263: AzadNet official subscription — large fresh pool (~900),
+        // reachable WITHOUT an active tunnel (raw.githubusercontent bootstrap-safe)
+        SourceDef(9, "AzadNet", "Official AzadNet channel sub - large fresh pool (~900)",
+            DefaultSources.SubUrl("[9]", "https://raw.githubusercontent.com/AzadNetCH/Clash/main/AzadNet.txt")),
+        // patch 265: two high-volume / high-freshness sources (third became source 7)
+        // (barry-far verified live 2026-11-18, ~8.9k configs, 15-min update cycle)
+        SourceDef(10, "BarryFar", "Massive raw pool (~8.9k), updated every 15m",
+            DefaultSources.RawUrl("[10]", "https://raw.githubusercontent.com/barry-far/V2ray-Config/main/All_Configs_Sub.txt")),
+        // morpheusadam: every config dial-tested before publish, Iran-focused bundle (~3k)
+        SourceDef(11, "MorpheusIR", "Iran-focused, dial-tested daily (~3k)",
+            DefaultSources.RawUrl("[11]", "https://raw.githubusercontent.com/morpheusadam/v2ray-config/main/subs/bundles/iran.txt")),
     )
 
     /** Every catalog source (used when the user has not picked any set). */
@@ -116,15 +135,22 @@ class FreeConfigUseCase @Inject constructor(
         cancelRequested = false
         _progress.value = DiscoveryProgress(
             running = true, phase = "search",
+            // patch 268: the progress panel is per-tab now — search runs
+            // must declare their owner so the vault tab never shows them
+            runOwner = "search",
             // live denominator = list size at start + found during this run
             base = 0,   // live search count = configs found THIS run only (pool excluded)
-
         )
         try {
             // IMPORTANT: do NOT pre-load / compare against the repo during the
             // search itself — that compare on every config caused UI lag.
             // Dedupe happens ONCE at the end (below), in memory.
             val fingerprints = emptySet<String>()
+
+            // patch 264: arm the tombstone memory for THIS run — dead servers
+            // from every previous search/ping session are rejected on sight,
+            // so the scanner keeps hunting until 50 FRESH configs are found
+            discovery.setDeadIdentities(settings.deadServers())
 
             // fetch sources one by one until target unique configs reached
             // (or the user presses Stop) — configs found so far are kept
@@ -159,7 +185,8 @@ class FreeConfigUseCase @Inject constructor(
                 results.add(r)
                 if (!cancelRequested) {
                     _progress.value = _progress.value.copy(
-                        done = idx + 1, total = sources.size, currentSource = source.name, found = collected.size
+                        done = idx + 1, total = sources.size, currentSource = source.name, found = collected.size,
+                        skippedDead = _progress.value.skippedDead + r.skippedDead,
                     )
                 }
             }
@@ -168,7 +195,7 @@ class FreeConfigUseCase @Inject constructor(
             if (!cancelRequested && collected.size < targetCount) {
                 sources.forEachIndexed { idx, source ->
                     if (cancelRequested || collected.size >= targetCount) return@forEachIndexed
-                    discovery.discoverSource(
+                    val r2 = discovery.discoverSource(
                         source = source,
                         existingFingerprints = fingerprints,
                         into = collected,
@@ -176,7 +203,10 @@ class FreeConfigUseCase @Inject constructor(
                         isCancelled = { cancelRequested },
                         onFound = onTick,
                     )
-                    _progress.value = _progress.value.copy(found = collected.size)
+                    _progress.value = _progress.value.copy(
+                        found = collected.size,
+                        skippedDead = _progress.value.skippedDead + r2.skippedDead,
+                    )
                 }
             }
 
@@ -249,6 +279,8 @@ class FreeConfigUseCase @Inject constructor(
         var lastCommit = 0L
         _progress.value = _progress.value.copy(
             running = true, phase = "ping", total = profiles.size, done = 0,
+            newImported = 0, skippedDead = 0,   // stale search summary must not linger
+            alive = 0, dead = 0, finished = false,  // patch 266: stale ping stats must not linger
             // which surface started this run — the OTHER pane's ping button
             // disables itself while this run is alive (no parallel pings)
             runOwner = when {
@@ -275,6 +307,14 @@ class FreeConfigUseCase @Inject constructor(
             }
         }
         if (pending.isNotEmpty()) repo.markTestedBatch(pending.toList())
+        // patch 264: servers that just failed their ping join the tombstone
+        // memory, so no future search re-imports them (any cosmetic rotation)
+        val deadNow = profiles
+            .filter { it.scope == Profile.Scope.FREE }   // FREE only — personal/subs untouched
+            .filter { it.id in pending.keys && (pending[it.id] ?: 0) < 0 }
+            .map { discovery.serverIdentityOf(it) }
+            .filter { it.isNotEmpty() }
+        if (deadNow.isNotEmpty()) settings.addDeadServers(deadNow.toSet())
         _progress.value = _progress.value.copy(running = false, finished = true)
     }
 

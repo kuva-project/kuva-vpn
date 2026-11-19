@@ -53,6 +53,7 @@
     <string name="protocol">پروتکل</string>
     <string name="address">آدرس</string>
     <string name="exit_ip">IP خروجی</string>
+    <string name="exit_ir_warning">بعضی از سرویس‌های تحریمی در دسترس نیست</string>
     <string name="location">موقعیت</string>
     <string name="status">وضعیت</string>
     <string name="traffic_10s">ترافیک ۱۰ ثانیه</string>
@@ -83,7 +84,9 @@
     <string name="source_progress">%1$d منبع • %2$d یافته‌شده • %3$d معتبر</string>
     <string name="found_live">پیدا شده: %1$d از %2$d</string>
     <string name="progress_pinging">در حال پینگ %1$d کانفیگ…</string>
+    <string name="ping_done">پینگ تمام شد</string>
     <string name="search_found">پیدا شده: %1$d</string>
+    <string name="search_result">%1$d جدید اضافه شد · %2$d سرور مردهٔ قبلی رد شد</string>
     <string name="exit_tile">اتصال خروج</string>
     <string name="undo">بازگردانی</string>
     <string name="undo_deleted_config">کانفیگ حذف شد</string>
@@ -209,8 +212,12 @@
     <string name="geo_check_short">بررسی</string>
     <string name="geo_reset">بازگردانی نسخه‌ی باندل</string>
     <string name="update_need_permission">اجازه‌ی نصب لازم است — برای اجازه‌دادن لمس کنید</string>
-    <string name="battery_optimization">بهینه‌سازی باتری فعال است</string>
+    <string name="battery_optimization">بهینه‌سازی باتری</string>
     <string name="battery_optimization_desc">اندروید ممکن است VPN را در پس‌زمینه بکشد — برای اجازه‌دادن به مصرف آزاد باتری لمس کنید</string>
+    <string name="battery_state_ok">بدون محدودیت ✓</string>
+    <string name="battery_state_restricted">محدود — برای رفع لمس کنید</string>
+    <string name="miui_battery">باتری مِی‌یو (بدون محدودیت)</string>
+    <string name="miui_autostart">شروع خودکار مِی‌یو (Autostart)</string>
     <string name="share_core_log">ارسال لاگ هسته</string>
     <string name="no_core_log">هنوز لاگی نیست — اول وصل شوید</string>
     <string name="share_swift_log">اشتراک‌گذاری لاگ Swift</string>

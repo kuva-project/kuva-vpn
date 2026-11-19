@@ -280,17 +280,26 @@ class SettingsViewModel @Inject constructor(
         _updateState.value = UpdateState.Idle
     }
 
-    /** True while this app is ON the battery-optimization list (i.e. the OS
-     *  may kill the VPN tunnel in the background). */
+    /** Stock Android layer: true while this app is ON the battery-optimization
+     *  list (i.e. the OS may kill the VPN tunnel in the background). */
     val batteryRestricted = androidx.compose.runtime.mutableStateOf(false)
 
-    /** Refreshes the battery-optimization flag (call on resume). */
+    /** True on Xiaomi/MIUI devices. There the stock battery dialog is rerouted
+     *  to PowerKeeper's HiddenAppsConfigActivity and the package URI is dropped
+     *  in transit (logcat 2026-11-17 18:19: `dat=package:` empty), so the
+     *  dialog opens without a target app and the setting never sticks — the
+     *  MIUI rows below are the primary path there. */
+    val miuiDevice: Boolean = runCatching {
+        android.os.Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true)
+    }.getOrDefault(false)
+
+    /** Refreshes the battery-optimization flag (call on every resume). */
     fun refreshBatteryRestricted() {
         val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
         batteryRestricted.value = !pm.isIgnoringBatteryOptimizations(context.packageName)
     }
 
-    /** Opens the system battery-optimization screen for this app. */
+    /** Opens the stock battery-optimization dialog for this app. */
     fun openBatteryOptimizationSettings() {
         runCatching {
             context.startActivity(
@@ -299,6 +308,39 @@ class SettingsViewModel @Inject constructor(
                     android.net.Uri.parse("package:" + context.packageName),
                 ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             )
+        }
+    }
+
+    /** Opens MIUI PowerKeeper's per-app battery screen DIRECTLY, with the
+     *  target package passed as the extra PowerKeeper expects — bypassing the
+     *  stock action whose rerouted intent loses the package URI. The user
+     *  then picks "بدون محدودیت" and it sticks. */
+    fun openMiuiBatterySettings() {
+        val ok = runCatching {
+            val intent = android.content.Intent().setClassName(
+                "com.miui.powerkeeper",
+                "com.miui.powerkeeper.ui.HiddenAppsConfigActivity",
+            )
+            intent.putExtra("package_name", context.packageName)
+            intent.putExtra("package_uid", android.os.Process.myUid())
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        }.isSuccess
+        // PowerKeeper missing or renamed: fall back to the stock dialog
+        if (!ok) openBatteryOptimizationSettings()
+    }
+
+    /** Opens MIUI's autostart manager. PowerKeeper restricts background work
+     *  of apps without autostart regardless of the battery setting, and
+     *  autostart is OFF by default for sideloaded apps. */
+    fun openMiuiAutostart() {
+        runCatching {
+            val intent = android.content.Intent().setClassName(
+                "com.miui.securitycenter",
+                "com.miui.permcenter.autostart.AutoStartManagementActivity",
+            )
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
         }
     }
 

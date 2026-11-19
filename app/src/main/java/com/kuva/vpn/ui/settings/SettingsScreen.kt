@@ -119,9 +119,18 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         }
     }
 
-    // refresh the battery-optimization flag every time settings opens/resumes
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        viewModel.refreshBatteryRestricted()
+    // refresh the battery-optimization flag on every resume — including when
+    // the user comes BACK from the settings screens, so the status column
+    // flips the moment the change is applied
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshBatteryRestricted()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     // which numeric editor is open (null = none)
     var editing by remember { mutableStateOf<NumField?>(null) }
@@ -136,43 +145,6 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     ) {
         Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineMedium)
-
-        // ---------- connection engine (top of all settings) ----------
-        SectionCard(stringResource(R.string.engine_mode)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("xray", "swift").forEach { m ->
-                    FilterChip(
-                        selected = s.engineMode == m,
-                        onClick = { viewModel.setEngineMode(m) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color.Transparent,
-                            labelColor = Color.White.copy(alpha = 0.75f),
-                            selectedContainerColor = Color.Transparent,
-                            selectedLabelColor = NeonPurple,
-                        ),
-                        border = if (s.engineMode == m)
-                            BorderStroke(1.5.dp, Brush.linearGradient(listOf(NeonPurple, PurpleGradientEnd)))
-                        else BorderStroke(1.5.dp, Color.White.copy(alpha = 0.15f)),
-                        label = {
-                            Text(
-                                when (m) {
-                                    "swift" -> stringResource(R.string.engine_swift)
-                                    else -> stringResource(R.string.engine_xray)
-                                }
-                            )
-                        },
-                    )
-                }
-            }
-            Text(
-                text = stringResource(
-                    if (s.engineMode == "swift") R.string.engine_swift_desc else R.string.engine_xray_desc
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
 
         // ---------- split tunneling ----------
         SectionCard(stringResource(R.string.split_tunneling)) {
@@ -334,11 +306,32 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 s.killSwitch,
                 viewModel::setKillSwitch,
             )
-            if (batteryRestricted) {
+            // always visible — the row vanishing after the setting was
+            // applied left the user without any confirmation (patch 237)
+            // patch 239: on MIUI the stock dialog is rerouted to PowerKeeper
+            // with the package URI dropped in transit — it flashes and closes
+            // without ever naming the app. Route the tap to the MIUI screen
+            // directly (which also fixes the stock flag there); on other
+            // devices the stock dialog is fine.
+            ValueRow(
+                stringResource(R.string.battery_optimization),
+                if (batteryRestricted) stringResource(R.string.battery_state_restricted)
+                else stringResource(R.string.battery_state_ok),
+                onClick = {
+                    if (viewModel.miuiDevice) viewModel.openMiuiBatterySettings()
+                    else viewModel.openBatteryOptimizationSettings()
+                },
+            )
+            if (viewModel.miuiDevice) {
                 ValueRow(
-                    stringResource(R.string.battery_optimization),
-                    stringResource(R.string.battery_optimization_desc),
-                    onClick = { viewModel.openBatteryOptimizationSettings() },
+                    stringResource(R.string.miui_battery),
+                    "",
+                    onClick = { viewModel.openMiuiBatterySettings() },
+                )
+                ValueRow(
+                    stringResource(R.string.miui_autostart),
+                    "",
+                    onClick = { viewModel.openMiuiAutostart() },
                 )
             }
             SwitchRow(

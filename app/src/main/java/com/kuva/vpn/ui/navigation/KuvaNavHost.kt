@@ -3,6 +3,8 @@ package com.kuva.vpn.ui.navigation
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.NavigationBar
@@ -13,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -71,9 +74,28 @@ fun KuvaNavHost(sharedLink: String? = null) {
         Tab(Routes.SETTINGS, R.string.nav_settings, R.drawable.ic_nav_settings),
     )
 
+    // patch 257: during the cold-start transition MIUI briefly reports a
+    // zero top (status-bar) inset, so the whole UI slid up ~statusbar-height
+    // for a frame or two and back ("invisible space above the header
+    // disappears and reappears"). Latch the largest top inset ever seen:
+    // it can only grow, never shrink, so a transient zero can no longer
+    // move the layout — the jump becomes structurally impossible.
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val statusBarTop = WindowInsets.statusBars.getTop(density)
+    val maxStatusBarTop = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableIntStateOf(statusBarTop)
+    }
+    if (statusBarTop > maxStatusBarTop.intValue) {
+        maxStatusBarTop.intValue = statusBarTop
+    }
+
     // bottom nav locked LTR: tab order identical in fa/en, only labels translate
     androidx.compose.runtime.CompositionLocalProvider(LocalNavController provides navController) {
+    // patch 257: Scaffold's default contentWindowInsets would feed the
+    // (possibly transient-zero) top inset straight into the body padding —
+    // zero them out and apply the latched top inset ourselves below.
     Scaffold(
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         bottomBar = {
             androidx.compose.runtime.CompositionLocalProvider(
                 androidx.compose.ui.platform.LocalLayoutDirection provides
@@ -83,7 +105,13 @@ fun KuvaNavHost(sharedLink: String? = null) {
                 val backStack by navController.currentBackStackEntryAsState()
                 val current = backStack?.destination
                 tabs.forEach { tab ->
-                    val selected = current?.hierarchy?.any { it.route == tab.route } == true
+                    // patch 256: on the very first frames currentBackStackEntryAsState
+                    // still returns null, so NO tab was selected and every icon
+                    // rendered small (52dp); a frame later Home became selected and
+                    // the icons grew to 72dp — a visible flicker + layout jump.
+                    // Until the back stack resolves, Home counts as selected.
+                    val selected = if (current == null) tab.route == Routes.HOME
+                        else current.hierarchy.any { it.route == tab.route }
                     NavigationBarItem(
                         selected = selected,
                         colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
@@ -106,7 +134,18 @@ fun KuvaNavHost(sharedLink: String? = null) {
                                 Image(
                                     painter = painterResource(tab.iconRes),
                                     contentDescription = null,
-                                    modifier = Modifier.size(if (selected) 72.dp else 52.dp),
+                                    // patch 256: the 72dp/52dp size swap changed the
+                                    // NavigationBar height on selection, the Scaffold
+                                    // padding recomputed and the whole screen jumped.
+                                    // The slot is now a constant 72dp; only the visual
+                                    // scale changes, so the layout can never shift.
+                                    modifier = Modifier
+                                        .size(72.dp)
+                                        .graphicsLayer {
+                                            val sc = if (selected) 1f else 52f / 72f
+                                            scaleX = sc
+                                            scaleY = sc
+                                        },
                                     alpha = if (selected) 1f else 0.75f,
                                     colorFilter = if (selected) null else
                                         androidx.compose.ui.graphics.ColorFilter.colorMatrix(
@@ -145,7 +184,16 @@ fun KuvaNavHost(sharedLink: String? = null) {
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
-            modifier = Modifier.padding(padding),
+            // patch 257: top = latched status-bar inset (never shrinks);
+            // bottom = Scaffold's own value (bottom bar + nav-bar inset)
+            modifier = Modifier.padding(
+                androidx.compose.foundation.layout.PaddingValues(
+                    top = with(density) { maxStatusBarTop.intValue.toDp() },
+                    // patch 260: calculateBottomPadding is a MEMBER of
+                    // PaddingValues (no import needed) and already returns Dp
+                    bottom = padding.calculateBottomPadding(),
+                )
+            ),
         ) {
             composable(Routes.HOME) { DashboardScreen(onToggleLanguage = toggleLanguage, isFa = isFa) }
             // screens locked LTR: only the texts translate, icons and their

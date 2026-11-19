@@ -89,6 +89,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.foundation.BorderStroke
 
 // bright neon blue for the engine-switch active state — shared theme token
 private val NeonSwitchBlue = com.kuva.vpn.ui.theme.AccentBlue
@@ -122,7 +124,12 @@ fun DashboardScreen(
     // shown (user request 2026-11-15)
     val dashScrollState = rememberScrollState()
     var powerButtonHeightPx by remember { mutableStateOf(0) }
-    val powerButtonVisible = dashScrollState.value < (powerButtonHeightPx * 0.8f).toInt()
+    // patch 255: before the first onSizeChanged the height is still 0, so
+    // `0 < 0` was false and the header status chip appeared on frame one,
+    // then collapsed a moment later — the whole layout jumped up/down.
+    // Treat "not yet measured" as "visible" so the chip starts hidden.
+    val powerButtonVisible = powerButtonHeightPx == 0 ||
+        dashScrollState.value < (powerButtonHeightPx * 0.8f).toInt()
     val headerStateColor = when (state) {
         is ConnectionState.Connected -> StatusGreen
         is ConnectionState.Connecting -> StatusOrange
@@ -553,12 +560,19 @@ fun DashboardScreen(
         // ---------- exit tile FIRST: tunnel exit when connected, direct IP otherwise ----------
         val connectedNow = state is ConnectionState.Connected
         val exitInfo = if (connectedNow) exitIp else directExitIp
+        // patch 242+244: WARP sessions sometimes exit with an IR-geolocated
+        // IP (2026-11-17/18 swift.log: "IR via ARN/FRA, warp on") while the
+        // user expects a foreign exit. Flag it inside the tile — no extra
+        // banner; the warning is a separate line under the location row.
+        val exitIso = exitInfo?.let { it.countryCode ?: isoFromCountryName(it.country) }
+        val irExitWarning = connectedNow && exitIso?.equals("IR", ignoreCase = true) == true
         ExitTile(
             ip = exitInfo?.ip,
-            countryIso = exitInfo?.let { it.countryCode ?: isoFromCountryName(it.country) },
+            countryIso = exitIso,
             location = exitInfo?.let { info ->
                 listOfNotNull(info.country, info.city).joinToString(", ").ifEmpty { null }
             },
+            irWarning = irExitWarning,
         )
 
         Spacer(Modifier.height(10.dp))
@@ -881,6 +895,8 @@ private fun ConfigCard(
     protocol: String?,
     address: String?,
 ) {
+    // patch 250: LTR like the ExitTile — Latin values, English-style layout
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -908,6 +924,7 @@ private fun ConfigCard(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -915,12 +932,23 @@ private fun ExitTile(
     ip: String?,
     countryIso: String?,
     location: String?,
+    irWarning: Boolean = false,
 ) {
+    // patch 250: the whole card is LTR (user decision — values are Latin
+    // text, so the card is laid out like the English variant in every
+    // language; this kills the marquee-direction issue entirely)
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+    // patch 242+244: amber accent when the tunnel exits via an IR-geolocated
+    // IP; the location row stays exactly as before and the warning is its
+    // own full-width line underneath (patch 244, user request)
+    val accent = if (irWarning) Color(0xFFFFB300) else Color.Transparent
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.10f)
+            containerColor = if (irWarning) Color(0xFFFFB300).copy(alpha = 0.08f)
+            else Color.White.copy(alpha = 0.10f)
         ),
+        border = if (irWarning) BorderStroke(1.5.dp, accent.copy(alpha = 0.55f)) else null,
         shape = RoundedCornerShape(20.dp),
     ) {
         Column(Modifier.padding(18.dp)) {
@@ -948,7 +976,31 @@ private fun ExitTile(
                     modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, repeatDelayMillis = 4000),
                 )
             }
+            if (irWarning) {
+                // patch 244: warning as its own full-width line below the
+                // location row — the row itself is untouched
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                    )
+                    Text(
+                        stringResource(R.string.exit_ir_warning),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = accent,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, repeatDelayMillis = 4000),
+                    )
+                }
+            }
         }
+    }
     }
 }
 

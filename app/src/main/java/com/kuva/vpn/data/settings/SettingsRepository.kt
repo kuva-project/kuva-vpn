@@ -52,7 +52,7 @@ data class AppSettings(
     val socksPort: Int = 10808,
     val speedTestLimitMB: Int = 10,
     // "xray" (config-driven) or "swift" (bundled configless MASQUE core)
-    val engineMode: String = "xray",
+    val engineMode: String = "swift",  // patch 244: Kuva Swift is the default engine
     val swiftH3: Boolean = false,      // HTTP/3 (QUIC) transport for Swift
     val swiftScan: Boolean = true,     // route scan before Swift connect
     val geoSource: String = "Chocolate4U/Iran-v2ray-rules", // Geo databases repo
@@ -86,6 +86,10 @@ data class AppSettings(
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "kuva_settings")
 
+// patch 264: cap on the dead-server tombstone set, keeps DataStore small;
+// entries beyond the cap are evicted arbitrarily
+private const val DEAD_SERVER_CAP = 2000
+
 @Singleton
 class SettingsRepository @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -113,22 +117,35 @@ class SettingsRepository @Inject constructor(
         val mtu = intPreferencesKey("mtu")
         val socksPort = intPreferencesKey("socks_port")
         val speedLimit = intPreferencesKey("speed_test_limit_mb")
-        val engineMode = stringPreferencesKey("engine_mode")
         val swiftH3 = booleanPreferencesKey("swift_h3")
         val swiftScan = booleanPreferencesKey("swift_scan")
         val geoSource = stringPreferencesKey("geo_source")
         val showNotifSpeed = booleanPreferencesKey("notif_show_speed")
-        val swiftPsiphon = booleanPreferencesKey("swift_psiphon")
         // patch 217: psiphon chain direction; the legacy boolean stays the
         // on/off source for the dashboard switch, service gate and notif
         val swiftPsiphonMode = stringPreferencesKey("swift_psiphon_mode")
-        val swiftPsiphonCountry = stringPreferencesKey("swift_psiphon_country")
         val swiftFragment = booleanPreferencesKey("swift_fragment")
         val swiftNoize = booleanPreferencesKey("swift_noize")
         val swiftSni = stringPreferencesKey("swift_sni")
+        // patch 264: tombstones of dead free-config servers (search memory)
+        val deadServers = stringSetPreferencesKey("dead_server_identities")
     }
 
-    val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
+    // patch 254: engine + psiphon layer state are PER-SESSION RUNTIME state,
+    // deliberately NOT persisted. Every fresh start boots on Kuva Swift with
+    // psiphon OFF/Auto (locked user decision) — inherently, with no forced
+    // write. The old DataStore-backed values raced the first UI read: the
+    // stale stored "xray" hit the dashboard before the forced "swift" write
+    // landed, causing the visible xray->swift jump on every app start.
+    // In-memory state cannot race — the very first emission is already
+    // "swift". The dashboard switch mutates these for the current session.
+    private val runtimeEngine = kotlinx.coroutines.flow.MutableStateFlow("swift")
+    private val runtimePsiphon = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private val runtimePsiphonCountry = kotlinx.coroutines.flow.MutableStateFlow("")
+
+    val settings: Flow<AppSettings> = kotlinx.coroutines.flow.combine(
+        context.dataStore.data, runtimeEngine, runtimePsiphon, runtimePsiphonCountry,
+    ) { p, engine, psi, psiCc ->
         AppSettings(
             themeMode = p[Keys.theme] ?: "system",
             language = p[Keys.language] ?: "system",
@@ -153,16 +170,14 @@ class SettingsRepository @Inject constructor(
             mtu = p[Keys.mtu] ?: 1420,
             socksPort = p[Keys.socksPort] ?: 10808,
             speedTestLimitMB = p[Keys.speedLimit] ?: 10,
-            engineMode = p[Keys.engineMode] ?: "xray",
+            engineMode = engine,  // patch 254: runtime session state
             swiftH3 = p[Keys.swiftH3] ?: false,
             swiftScan = p[Keys.swiftScan] ?: true,
             geoSource = p[Keys.geoSource] ?: "Chocolate4U/Iran-v2ray-rules",
             showNotifSpeed = p[Keys.showNotifSpeed] ?: false,
-            swiftPsiphon = p[Keys.swiftPsiphon] ?: false,
-            swiftPsiphonMode = p[Keys.swiftPsiphonMode] ?: (
-                if (p[Keys.swiftPsiphon] == true) "reverse" else "chain"
-            ),
-            swiftPsiphonCountry = p[Keys.swiftPsiphonCountry] ?: "",
+            swiftPsiphon = psi,  // patch 254: runtime session state
+            swiftPsiphonMode = p[Keys.swiftPsiphonMode] ?: "chain",
+            swiftPsiphonCountry = psiCc,  // patch 254: runtime session state
             swiftFragment = p[Keys.swiftFragment] ?: false,
             swiftNoize = p[Keys.swiftNoize] ?: false,
             swiftSni = p[Keys.swiftSni] ?: "",
@@ -191,7 +206,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setKillSwitch(b: Boolean) = context.dataStore.edit { it[Keys.killSwitch] = b }
     suspend fun setIpv6(b: Boolean) = context.dataStore.edit { it[Keys.ipv6] = b }
     suspend fun setSwiftH3(b: Boolean) = context.dataStore.edit { it[Keys.swiftH3] = b }
-    suspend fun setSwiftPsiphon(b: Boolean) = context.dataStore.edit { it[Keys.swiftPsiphon] = b }
+    // patch 254: session-scoped — mutates runtime state, nothing persisted
+    suspend fun setSwiftPsiphon(b: Boolean) { runtimePsiphon.value = b }
 
     /**
      * patch 217: psiphon chain direction, "chain" or "reverse"; anything
@@ -201,9 +217,13 @@ class SettingsRepository @Inject constructor(
      * the settings card is where the mode is chosen, the dashboard switch
      * simply toggles it.
      */
-    suspend fun setSwiftPsiphonMode(mode: String) = context.dataStore.edit {
-        it[Keys.swiftPsiphonMode] = if (mode == "reverse") "reverse" else "chain"
-        it[Keys.swiftPsiphon] = true
+    // patch 254: mode persists (a preference), but picking a direction also
+    // turns the layer ON for this session — same behavior as before
+    suspend fun setSwiftPsiphonMode(mode: String) {
+        context.dataStore.edit {
+            it[Keys.swiftPsiphonMode] = if (mode == "reverse") "reverse" else "chain"
+        }
+        runtimePsiphon.value = true
     }
 
     /**
@@ -212,10 +232,11 @@ class SettingsRepository @Inject constructor(
      * store "" for Auto and uppercase ISO-2 codes otherwise — anything else
      * falls back to Auto.
      */
+    // patch 254: session-scoped — mutates runtime state, nothing persisted
     suspend fun setSwiftPsiphonCountry(cc: String) {
         val v = cc.trim().uppercase()
-        val safe = if (v.length == 2 && v.all { it in 'A'..'Z' }) v else ""
-        context.dataStore.edit { it[Keys.swiftPsiphonCountry] = safe }
+        runtimePsiphonCountry.value =
+            if (v.length == 2 && v.all { it in 'A'..'Z' }) v else ""
     }
     suspend fun setSwiftScan(b: Boolean) = context.dataStore.edit { it[Keys.swiftScan] = b }
 
@@ -233,7 +254,26 @@ class SettingsRepository @Inject constructor(
     suspend fun setMtu(v: Int) = context.dataStore.edit { it[Keys.mtu] = v }
     suspend fun setSocksPort(v: Int) = context.dataStore.edit { it[Keys.socksPort] = v }
     suspend fun setSpeedTestLimit(mb: Int) = context.dataStore.edit { it[Keys.speedLimit] = mb }
-    suspend fun setEngineMode(mode: String) = context.dataStore.edit { it[Keys.engineMode] = mode }
+    // patch 254: session-scoped — mutates runtime state, nothing persisted
+    suspend fun setEngineMode(mode: String) {
+        runtimeEngine.value = if (mode == "xray") "xray" else "swift"
+    }
+
+    // patch 264: dead-server tombstones — server identities that failed a
+    // ping, consulted by every free-config search so dead servers are never
+    // re-imported. FREE scope only; subscriptions/personal never touched.
+    suspend fun deadServers(): Set<String> =
+        context.dataStore.data.first()[Keys.deadServers] ?: emptySet()
+
+    suspend fun addDeadServers(ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            val merged = (prefs[Keys.deadServers] ?: emptySet()) + ids
+            prefs[Keys.deadServers] =
+                if (merged.size > DEAD_SERVER_CAP) merged.drop(merged.size - DEAD_SERVER_CAP).toSet()
+                else merged
+        }
+    }
 
     suspend fun resetAll() {
         context.dataStore.edit { it.clear() }

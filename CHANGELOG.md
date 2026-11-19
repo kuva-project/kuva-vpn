@@ -2,6 +2,50 @@
 
 All notable changes to KUVAVpn are documented here.
 
+## v1.2.6 — 2026-11-19
+
+### Added
+- **Dead-server tombstone memory**: servers that fail their ping are
+  remembered (up to 2000) and silently skipped in future searches; the
+  end-of-search summary also counts "known-dead skipped". Personal
+  subscriptions and manual profiles are never tombstoned.
+- **Randomized source order per search**: every search starts at a random
+  point in the catalog, so no source is always first or starved.
+- **Catalog rebuilt — 11 sources**: Barry-Far (~8.9k configs, 15-min
+  refresh) and MorpheusIR (~3k, daily dial-test) added; NoahGCP (HTTP-tested
+  every 30 min) replaced the retired 0xRadikal pool; official AzadNet (~900)
+  added.
+- **Ping report stays on screen after the run** ("Ping finished" with
+  alive/dead counts) — in both search and vault tabs, until you transfer to
+  vault, delete dead configs, clear results or start a new ping.
+
+### Changed
+- **Engine always starts as Kuva Swift** on every app open — now applied
+  synchronously before any UI reads a stale stored value; the dashboard
+  switch still selects Xray for the session.
+- **Dark-only theme**: the light palette is removed; the theme is applied
+  once, synchronously, at app start.
+- **Dashboard marquee direction follows the app language**: the Exit IP,
+  location and address rows slide in the reading direction (RTL for
+  Persian); the Exit tile stays LTR for Latin values.
+- **Per-tab progress panels**: a search ping never shows its stats in the
+  vault tab and vice versa; deleting dead configs also clears the finished
+  ping report.
+
+### Fixed
+- **Header status chip jump** on the first frame, before the power button
+  height is measured.
+- **Tunnel health reworked**: an HTTP health-endpoint answer is
+  informational only — liveness requires real data through the tunnel;
+  reconnect now triggers after 3 consecutive probe failures (was 2) and
+  tries a lighter-weight recovery before the full reconnect.
+- **Leave-settings confirmation**: changing settings without saving now
+  asks first (custom dialog — MIUI rerouted the stock one to PowerKeeper).
+- **Iran-exit warning**: WARP sessions exiting through an Iran-geolocated
+  IP now show a full-width amber warning line on the dashboard.
+- **swift.log completeness**: session start/end markers and network-loss
+  events are now recorded in swift.log (previously visible only in logcat).
+
 ## v1.2.5 — 2026-11-17
 
 ### Added

@@ -74,7 +74,12 @@ class FreeConfigViewModel @Inject constructor(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun transferToVault() = viewModelScope.launch { freeUseCase.transferToVault() }
+    fun transferToVault() = viewModelScope.launch {
+        freeUseCase.transferToVault()
+        // patch 266: the ping stats that stayed on screen after the run
+        // disappear now — the move action is done, nothing left to count
+        freeUseCase.resetProgress()
+    }
 
     fun testVaultPings() = viewModelScope.launch { freeUseCase.testAllPings(scope = Profile.Scope.FREE, vaultOnly = true) }
 
@@ -84,7 +89,12 @@ class FreeConfigViewModel @Inject constructor(
     /** Second tap on the ping button stops the run. */
     fun cancelPing() = freeUseCase.cancelSearch()
 
-    fun deleteDeadVault() = viewModelScope.launch { freeUseCase.deleteDeadVault() }
+    fun deleteDeadVault() = viewModelScope.launch {
+        freeUseCase.deleteDeadVault()
+        // patch 268: dead ones are gone — the finished ping report has nothing
+        // left to describe, so it disappears with them
+        freeUseCase.resetProgress()
+    }
 
     /** Swipe-right single ping in the vault. */
     fun pingSingle(id: Long) = viewModelScope.launch {
@@ -128,13 +138,13 @@ class FreeConfigViewModel @Inject constructor(
     // search uses ALL catalog sources (default = option A).
     private var activeSources: List<com.kuva.vpn.core.discovery.FreeConfigSource>? = null
 
-    private val _selNums = MutableStateFlow((1..8).toList())
+    private val _selNums = MutableStateFlow(freeUseCase.sourceCatalog().map { it.number })
     val selNums: StateFlow<List<Int>> = _selNums.asStateFlow()
 
     val sourceCatalog: List<FreeConfigUseCase.SourceDef> get() = freeUseCase.sourceCatalog()
 
-    /** Called by the Sources dialog on confirm. Numbers 1-8 = catalog sources,
-     *  extra URLs become temporary SubUrl sources numbered 10 and up. */
+    /** Called by the Sources dialog on confirm. Catalog numbers = sources,
+     *  extra URLs become temporary SubUrl sources numbered 20 and up. */
     /** Checkbox / Select-All updates from the dialog — always applied. */
     fun updateSelNums(nums: List<Int>) { _selNums.value = nums }
 
@@ -143,7 +153,7 @@ class FreeConfigViewModel @Inject constructor(
         _selNums.value = nums
         val picked = freeUseCase.sourceCatalog().filter { it.number in nums }.map { it.source }
         val extra = customUrls.mapIndexed { i, u ->
-            com.kuva.vpn.core.discovery.DefaultSources.SubUrl("[${10 + i}]", u)
+            com.kuva.vpn.core.discovery.DefaultSources.SubUrl("[${20 + i}]", u)
         }
         activeSources = picked + extra
     }
@@ -151,8 +161,15 @@ class FreeConfigViewModel @Inject constructor(
     fun searchFree() = viewModelScope.launch { freeUseCase.searchFreeConfigs(enabled = activeSources) }
     fun cancelSearch() = freeUseCase.cancelSearch()
     fun testAllPings() = viewModelScope.launch { freeUseCase.testAllPings() }
-    fun deleteDead() = viewModelScope.launch { freeUseCase.deleteDeadConfigs() }
-    fun clearResults() = viewModelScope.launch { freeUseCase.clearSearchResults() }
+    fun deleteDead() = viewModelScope.launch {
+        freeUseCase.deleteDeadConfigs()
+        freeUseCase.resetProgress()   // patch 268: same as vault — report dies with the dead
+    }
+    fun clearResults() = viewModelScope.launch {
+        freeUseCase.clearSearchResults()
+        // patch 266: empty list + stale stats make no sense together
+        freeUseCase.resetProgress()
+    }
 
     fun select(id: Long) = viewModelScope.launch { repo.select(id) }
 
