@@ -58,6 +58,8 @@
     <string name="exit_ip">Exit IP</string>
     <string name="exit_ir_warning">Some sanctioned services are unavailable</string>
     <string name="location">Location</string>
+    <string name="network">Network</string>
+    <string name="no_network">Network unverified</string>
     <string name="status">Status</string>
     <string name="traffic_10s">10s traffic</string>
     <string name="leak_protected">DNS leak protection active</string>
@@ -251,6 +253,7 @@
     <string name="notif_channel_status_desc">Shows current connection status and live speed</string>
     <string name="notif_connected">Connected — %1$s</string>
     <string name="notif_connecting">Connecting…</string>
+    <string name="notif_connecting_swift">Kuva Swift — Connecting…</string>
     <string name="notif_disconnected">Disconnected</string>
     <string name="notif_stop">Stop</string>
     <string name="notif_speed">↑ %1$s  ↓ %2$s</string>

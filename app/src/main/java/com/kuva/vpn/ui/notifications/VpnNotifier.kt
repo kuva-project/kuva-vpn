@@ -61,6 +61,19 @@ class VpnNotifier @Inject constructor(
     }
 
     /**
+     * patch 274: Swift scan phase — the profile name is meaningless here
+     * (the config is not used until the tunnel is up), show the engine
+     * label instead so the status bar never names a config that is not
+     * actually being connected through.
+     */
+    fun notifyConnectingSwift() {
+        val b = NotificationCompat.Builder(context, CHANNEL)
+            .setContentTitle(context.getString(R.string.notif_connecting_swift))
+            .setContentText("")
+        nm.notify(ID, base(b))
+    }
+
+    /**
      * [subtitle] is the Swift tunnel kind ("WARP" / "WARP + Psiphon") or null
      * for Xray (which keeps the plain "Connected — <config>").
      * [showSpeed]: user opt-in from Settings (default off) — when true the

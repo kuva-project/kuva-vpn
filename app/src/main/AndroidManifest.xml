@@ -35,6 +35,11 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- patch 273: QS tile long-press (Android 13/14 SystemUI
+                 resolves an activity by this action) -> open the app -->
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
             <!-- Import configs / subs via shared links -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -100,6 +105,11 @@
             <meta-data
                 android:name="android.service.quicksettings.ACTIVE_TILE"
                 android:value="true" />
+            <!-- patch 272: long-press on the QS tile opens the app
+                 (MainActivity) instead of the system App info page -->
+            <meta-data
+                android:name="android.service.quicksettings.metaDataActivity"
+                android:value="com.kuva.vpn.ui.MainActivity" />
         </service>
 
         <provider

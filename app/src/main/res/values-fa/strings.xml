@@ -55,6 +55,8 @@
     <string name="exit_ip">IP خروجی</string>
     <string name="exit_ir_warning">بعضی از سرویس‌های تحریمی در دسترس نیست</string>
     <string name="location">موقعیت</string>
+    <string name="network">شبکه</string>
+    <string name="no_network">شبکه نامشخص</string>
     <string name="status">وضعیت</string>
     <string name="traffic_10s">ترافیک ۱۰ ثانیه</string>
     <string name="leak_protected">محافظت از نشت DNS فعال است</string>
@@ -285,6 +287,7 @@
     <string name="notif_channel_status_desc">وضعیت اتصال و سرعت زنده را نشان می‌دهد</string>
     <string name="notif_connected">متصل — %1$s</string>
     <string name="notif_connecting">در حال اتصال…</string>
+    <string name="notif_connecting_swift">Kuva Swift — در حال اتصال…</string>
     <string name="notif_disconnected">قطع است</string>
     <string name="notif_stop">توقف</string>
     <string name="notif_speed">↑ %1$s  ↓ %2$s</string>

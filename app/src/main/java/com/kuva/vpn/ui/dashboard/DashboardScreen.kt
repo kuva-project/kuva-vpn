@@ -572,6 +572,7 @@ fun DashboardScreen(
             location = exitInfo?.let { info ->
                 listOfNotNull(info.country, info.city).joinToString(", ").ifEmpty { null }
             },
+            isp = exitInfo?.isp,
             irWarning = irExitWarning,
         )
 
@@ -932,6 +933,7 @@ private fun ExitTile(
     ip: String?,
     countryIso: String?,
     location: String?,
+    isp: String? = null,
     irWarning: Boolean = false,
 ) {
     // patch 250: the whole card is LTR (user decision — values are Latin
@@ -955,6 +957,26 @@ private fun ExitTile(
             InfoRow(stringResource(R.string.exit_ip), ip ?: stringResource(R.string.unavailable))
             // same layout as InfoRow (90dp label), with the flag sized to
             // the text line height and drawn BEFORE the value
+            // patch 272: hosting/ISP line ABOVE the location row (row order
+            // swapped, user request) — same
+            // geoip lookup already carries the isp/org field. ALWAYS shown
+            // (user request): while the lookup has not answered yet the row
+            // shows a placeholder, matching the exit-ip/location rows
+            val ispShown = isp ?: stringResource(R.string.no_network)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+            ) {
+                Text(stringResource(R.string.network),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(90.dp))
+                Text(ispShown,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        textDirection = latinDir(ispShown)),
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, repeatDelayMillis = 4000))
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),

@@ -335,7 +335,9 @@ class KuvaVpnService : VpnService() {
      */
     private suspend fun connectSwift(profile: Profile) {
         val s = settings.current
-        notifier.notifyConnecting(profile.name)
+        // patch 274: engine label, NOT the selected config name — during the
+        // Swift scan the config plays no role yet and naming it confused users
+        notifier.notifyConnectingSwift()
         // no generic "Connecting…" hop: the scan state (with progress) is
         // shown from the very first moment of a Swift connection
         connectionRepo.setState(ConnectionState.SwiftConnecting(profile.name, 0))
