@@ -9,12 +9,13 @@ plugins {
 
 android {
     namespace = "com.kuva.vpn"
-    compileSdk = 35
+    compileSdk = 36
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.kuva.vpn"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 9
         versionName = "1.2.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -33,8 +34,12 @@ android {
             // Splits apply ONLY to release/bundle tasks: a plain debug Run then
             // packages ONE apk instead of five (packaging 5 APKs was the single
             // biggest slow-down of every build since ABI splits were added).
+            // Splits must ONLY be on for assembleRelease (GitHub APKs).
+            // bundleRelease must build with splits OFF: the AAB bundle task
+            // crashes with "Sequence contains more than one matching element"
+            // when multiple split outputs exist (AGP 8.9.x bug).
             isEnable = gradle.startParameter.taskNames.any {
-                it.contains("Release", true) || it.contains("Bundle", true)
+                it.contains("assembleRelease", true)
             }
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86_64")
