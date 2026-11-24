@@ -7,9 +7,15 @@
 </p>
 
 <p align="center">
-  <img src="art/screenshots/dashboard.png" width="200"/>&nbsp;&nbsp;
+  <img src="art/screenshots/dashboard_connected.png" width="200"/>&nbsp;&nbsp;
   <img src="art/screenshots/free_configs.png" width="200"/>&nbsp;&nbsp;
+  <img src="art/screenshots/my_configs.png" width="200"/>
+
+<p align="center">
+  <img src="art/screenshots/dashboard.png" width="200"/>&nbsp;&nbsp;
+  <img src="art/screenshots/free_configs_pool.png" width="200"/>&nbsp;&nbsp;
   <img src="art/screenshots/settings.png" width="200"/>
+</p>
 </p>
 
 Premium Android VPN client with **two engines**: the classic **Xray-core**
