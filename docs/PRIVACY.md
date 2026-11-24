@@ -1,6 +1,6 @@
 # Privacy Policy — KUVAVpn
 
-_Last updated: 2026-11-09_
+_Last updated: 2026-11-24_
 
 KUVAVpn is an open-source VPN client for Android, powered by the Xray core.
 This policy describes exactly what network activity the app performs and what
@@ -42,6 +42,7 @@ a server operated by the developer, because the developer operates none.
 | Purpose | Services contacted | When |
 |---|---|---|
 | VPN tunnel | the server(s) in **your** configs / subscriptions | when you connect |
+| Kuva Swift connection (serverless engine) | Cloudflare WARP endpoints (encrypted MASQUE tunnel over HTTP/2 or HTTP/3/QUIC); with the optional Psiphon layer, Psiphon bootstrap and relay servers | when you connect with the Swift engine |
 | Subscription refresh | the subscription URL **you** entered | when you add/refresh a subscription |
 | Free-config discovery | public GitHub raw repositories (freefq, Pawdroid, mahdibland, MhdiTaheri, Au1rxx, hamedcode), `radarhub.top`, public Telegram channel previews (`t.me/s/…`) | when you use the "new configs" tab or refresh |
 | Config ping (latency) | TCP handshake to each config's server address | when you run a ping |
@@ -52,6 +53,19 @@ a server operated by the developer, because the developer operates none.
 
 Free-config sources are third parties. Configs obtained from them point to
 servers operated by whoever published them — treat them accordingly.
+
+### 3.1 The Kuva Swift engine
+
+Kuva Swift needs no configuration and no account. It establishes an
+encrypted MASQUE proxy tunnel directly from your device to Cloudflare's
+WARP network (the same network the Cloudflare WARP app uses), scanning
+Cloudflare's endpoints for the fastest one. Your traffic exits from a
+Cloudflare WARP address — the developer operates no server in this path
+and receives nothing. If you enable the optional Psiphon layer, the
+Psiphon client library bundled in the app bootstraps through the tunnel
+and your exit becomes a Psiphon node in the region you picked. No
+registration, identifier or account of any kind is created with
+Cloudflare or Psiphon.
 
 ## 4. Android permissions and their purpose
 
@@ -74,6 +88,9 @@ server's operator (your own panel, a subscription provider, or a free-config
 publisher) can see the destination of your traffic in the same way any VPN
 operator can. KUVAVpn adds no identification of its own beyond what the
 config protocol requires (e.g. your UUID, which the server must have anyway).
+
+With the Kuva Swift engine, the "operator" is Cloudflare (WARP network),
+or a Psiphon exit node when the Psiphon layer is enabled.
 
 ## 6. Children
 
