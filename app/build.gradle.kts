@@ -154,8 +154,8 @@ androidComponents {
                 "x86_64" -> 5
                 else -> 1
             }
-            // +5 v1.1.0, +6 v1.1.1, +7 v1.2.0, +8 v1.2.1, +9 v1.2.2, +10 v1.2.3, +11 v1.2.4, +12 v1.2.5 — installs over all older ones
-            output.versionCode.set(code * 1000 + 12)
+            // +5 v1.1.0, +6 v1.1.1, +7 v1.2.0, +8 v1.2.1, +9 v1.2.2, +10 v1.2.3, +11 v1.2.4, +12 v1.2.5, +13 v1.2.7-play (Play internal-testing rebuild — 1012 was burned by the SDK-35 draft) — installs over all older ones
+            output.versionCode.set(code * 1000 + 13)
         }
     }
 }
