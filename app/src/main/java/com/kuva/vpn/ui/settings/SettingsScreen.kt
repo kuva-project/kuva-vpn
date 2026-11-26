@@ -104,20 +104,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var xrayLog by remember { mutableStateOf<String?>(null) }
     val geoState by viewModel.geoState.collectAsStateWithLifecycle()
     val geoMessage by viewModel.geoMessage.collectAsStateWithLifecycle()
-    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val batteryRestricted = viewModel.batteryRestricted.value
-
-    // the user tapped the update banner on the dashboard: it landed here with
-    // the auto-check flag set — run the update check immediately, clear flag
-    val appUpdateFlag = androidx.compose.ui.platform.LocalContext.current
-        .applicationContext as com.kuva.vpn.KuvaApplication
-    val runUpdateCheck by appUpdateFlag.runUpdateCheck.collectAsState()
-    androidx.compose.runtime.LaunchedEffect(runUpdateCheck) {
-        if (runUpdateCheck) {
-            appUpdateFlag.runUpdateCheck.value = false
-            viewModel.checkForUpdates()
-        }
-    }
 
     // refresh the battery-optimization flag on every resume — including when
     // the user comes BACK from the settings screens, so the status column
@@ -371,67 +358,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
 
         // ---------- about ----------
         SectionCard(stringResource(R.string.about), initiallyExpanded = true) {
-            // ---------- in-app update ----------
-            when (val u = updateState) {
-                is SettingsViewModel.UpdateState.Idle -> Unit
-                is SettingsViewModel.UpdateState.Checking -> ValueRow(
-                    stringResource(R.string.update_check),
-                    stringResource(R.string.update_checking),
-                    onClick = {},
-                )
-                is SettingsViewModel.UpdateState.UpToDate -> ValueRow(
-                    stringResource(R.string.update_check),
-                    stringResource(
-                        R.string.update_latest,
-                        com.kuva.vpn.BuildConfig.VERSION_NAME,
-                    ),
-                    onClick = { viewModel.dismissUpdateState() },
-                )
-                is SettingsViewModel.UpdateState.Available -> {
-                    ValueRow(
-                        stringResource(R.string.update_available, u.version),
-                        stringResource(R.string.update_download),
-                        onClick = {
-                            viewModel.downloadAndInstall(u.version, u.assetName, u.assetUrl)
-                        },
-                    )
-                    Text(
-                        stringResource(R.string.update_install_prompt),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                }
-                is SettingsViewModel.UpdateState.Downloading -> ValueRow(
-                    stringResource(R.string.update_download),
-                    stringResource(R.string.update_downloading, "${u.percent}%"),
-                    onClick = {},
-                )
-                is SettingsViewModel.UpdateState.InstallPrompted -> ValueRow(
-                    stringResource(R.string.update_check),
-                    stringResource(R.string.update_install_prompt),
-                    onClick = { viewModel.dismissUpdateState() },
-                )
-                is SettingsViewModel.UpdateState.PermissionNeeded -> ValueRow(
-                    stringResource(R.string.update_check),
-                    stringResource(R.string.update_need_permission),
-                    onClick = { viewModel.openInstallPermissionSettings() },
-                )
-                is SettingsViewModel.UpdateState.Failed -> ValueRow(
-                    stringResource(R.string.update_check),
-                    stringResource(R.string.update_failed, u.message),
-                    onClick = { viewModel.dismissUpdateState() },
-                )
-            }
-            // action row only while idle: while checking/downloading the state
-            // row above already stands in its place (no duplicated title)
-            if (updateState is SettingsViewModel.UpdateState.Idle) {
-                ValueRow(
-                    stringResource(R.string.update_check),
-                    "",
-                    onClick = { viewModel.checkForUpdates() },
-                )
-            }
+            // patch 283: the in-app update UI lives on the dashboard
+            // banner now (tap opens the Play Store page) — nothing here
             ValueRow(
                 stringResource(R.string.geo_assets),
                 stringResource(R.string.geo_check_short),

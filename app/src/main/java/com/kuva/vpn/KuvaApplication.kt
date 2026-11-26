@@ -23,11 +23,10 @@ class KuvaApplication : Application() {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** result of the once-per-app-start update check; drives the banner + red dot */
-    val updateAvailable = MutableStateFlow(false)
-
-    /** set when the user taps the update banner: Settings auto-runs a check */
-    val runUpdateCheck = MutableStateFlow(false)
+    /** Latest GitHub release version when it differs from the installed one;
+     *  null = up to date or the check failed. Drives the dashboard banner,
+     *  which stays visible until the app is actually updated (patch 283). */
+    val latestVersion = MutableStateFlow<String?>(null)
 
     override fun onCreate() {
         super.onCreate()
@@ -42,6 +41,15 @@ class KuvaApplication : Application() {
             androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
         )
         installCrashHandler()
+        // patch 283: once-per-app-start GitHub update check — when a newer
+        // release exists, latestVersion is set and the dashboard shows the
+        // update banner (tap opens the Play Store page) until updated
+        appScope.launch {
+            runCatching {
+                val r = updater.check(com.kuva.vpn.BuildConfig.VERSION_NAME)
+                if (r.updateAvailable) latestVersion.value = r.latestVersion
+            }
+        }
         // Every fresh process start (user pressed Exit, swiped the app away,
         // or the system killed it in the background) wipes stored ping/speed
         // numbers — old measurements must not be presented as current.
@@ -63,14 +71,6 @@ class KuvaApplication : Application() {
                 java.io.File(filesDir, "logs/xray_access.log").delete()
                 java.io.File(filesDir, "exports").listFiles()
                     ?.forEach { if (it.name.startsWith("swift_log_")) it.delete() }
-            }
-        }
-        // silent update check once per app start; failures are ignored —
-        // the user just sees no banner / no red dot
-        appScope.launch {
-            runCatching {
-                updateAvailable.value =
-                    updater.check(BuildConfig.VERSION_NAME).updateAvailable
             }
         }
         appScope.launch {

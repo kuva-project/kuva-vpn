@@ -16,8 +16,8 @@ android {
         applicationId = "com.kuva.vpn"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.2.7"
+        versionCode = 10
+        versionName = "1.2.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         ndk {
@@ -154,8 +154,8 @@ androidComponents {
                 "x86_64" -> 5
                 else -> 1
             }
-            // +5 v1.1.0, +6 v1.1.1, +7 v1.2.0, +8 v1.2.1, +9 v1.2.2, +10 v1.2.3, +11 v1.2.4, +12 v1.2.5, +13 v1.2.7-play (Play internal-testing rebuild — 1012 was burned by the SDK-35 draft) — installs over all older ones
-            output.versionCode.set(code * 1000 + 13)
+            // +5 v1.1.0, +6 v1.1.1, +7 v1.2.0, +8 v1.2.1, +9 v1.2.2, +10 v1.2.3, +11 v1.2.4, +12 v1.2.5, +13 v1.2.7-play (1012 burned by the SDK-35 draft), +14 v1.2.7-play-r2 (1014 burned — superseded before upload), +15 v1.2.7-play-r3 (patch 283 — persistent dashboard update banner opens the Play page; in-app update UI removed from Settings) — installs over all older ones
+            output.versionCode.set(code * 1000 + 16)
         }
     }
 }

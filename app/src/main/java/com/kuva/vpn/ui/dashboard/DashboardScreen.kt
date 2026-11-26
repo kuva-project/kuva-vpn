@@ -150,18 +150,11 @@ fun DashboardScreen(
 
     val exitContext = androidx.compose.ui.platform.LocalContext.current
 
-    // update banner: KuvaApplication checks GitHub once per app start; when a
-    // newer release exists, show the banner for 8 seconds
-    val appUpdateAvailable by (exitContext.applicationContext as com.kuva.vpn.KuvaApplication)
-        .updateAvailable.collectAsState()
-    var showUpdateBanner by remember { mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(appUpdateAvailable) {
-        if (appUpdateAvailable) {
-            showUpdateBanner = true
-            kotlinx.coroutines.delay(8000)   // visible ~8s, then fades out
-            showUpdateBanner = false
-        }
-    }
+    // update banner: KuvaApplication checks GitHub once per app start;
+    // while a newer release exists (not yet installed) the banner stays
+    // visible — tapping it opens the Play Store page (patch 283)
+    val appUpdateLatest by (exitContext.applicationContext as com.kuva.vpn.KuvaApplication)
+        .latestVersion.collectAsState()
     androidx.activity.compose.BackHandler { showExitDialog = true }
 
     if (showPsiphonCountrySheet) {
@@ -406,20 +399,11 @@ fun DashboardScreen(
         }
         }  // end LTR header provider
 
-        // update-available banner (auto-dismisses after 8s)
-        // tapping it opens Settings and auto-starts the update check
-        val navController = LocalNavController.current
-        androidx.compose.animation.AnimatedVisibility(visible = showUpdateBanner) {
-            UpdateBanner(onOpenSettings = {
-                (exitContext.applicationContext as com.kuva.vpn.KuvaApplication)
-                    .runUpdateCheck.value = true
-                navController?.navigate(
-                    com.kuva.vpn.ui.navigation.Routes.SETTINGS,
-                ) {
-                    popUpTo(com.kuva.vpn.ui.navigation.Routes.HOME) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
+        // update-available banner: visible until the app is updated;
+        // tapping it opens the Play Store page (patch 283)
+        androidx.compose.animation.AnimatedVisibility(visible = appUpdateLatest != null) {
+            UpdateBanner(onOpenPlay = {
+                com.kuva.vpn.core.update.GitHubUpdater.openPlayStore(exitContext)
             })
         }
 
@@ -806,7 +790,7 @@ private fun SwiftCard(psiphonOn: Boolean, psiphonMode: String, isFa: Boolean) {
 }
 
 @Composable
-private fun UpdateBanner(onOpenSettings: () -> Unit = {}) {
+private fun UpdateBanner(onOpenPlay: () -> Unit = {}) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -815,7 +799,7 @@ private fun UpdateBanner(onOpenSettings: () -> Unit = {}) {
             .clip(RoundedCornerShape(16.dp))
             .background(Color(0xFF1B1726))
             .border(1.dp, Gold.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
-            .clickable { onOpenSettings() }
+            .clickable { onOpenPlay() }
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Box(

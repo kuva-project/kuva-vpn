@@ -62,10 +62,12 @@ fun KuvaNavHost(sharedLink: String? = null) {
             androidx.core.os.LocaleListCompat.forLanguageTags(target)
         )
     }
-    // app-start update check result (computed once in KuvaApplication):
-    // drives the red dot on the settings tab until the app is updated
-    val updateAvailable by (androidx.compose.ui.platform.LocalContext.current.applicationContext
-        as com.kuva.vpn.KuvaApplication).updateAvailable.collectAsState()
+    // app-start update check result (computed once in KuvaApplication,
+    // patch 283): drives the red dot on the home tab — where the update
+    // banner lives — until the app is updated
+    val latestVersion by (androidx.compose.ui.platform.LocalContext.current.applicationContext
+        as com.kuva.vpn.KuvaApplication).latestVersion.collectAsState()
+    val updateAvailable = latestVersion != null
 
     val tabs = listOf(
         Tab(Routes.HOME, R.string.nav_home, R.drawable.ic_nav_home),
@@ -152,8 +154,8 @@ fun KuvaNavHost(sharedLink: String? = null) {
                                             androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0.85f) },
                                         ),
                                 )
-                                // red update dot on the settings tab until updated
-                                if (tab.route == Routes.SETTINGS && updateAvailable) {
+                                // red update dot on the home tab until updated
+                                if (tab.route == Routes.HOME && updateAvailable) {
                                     Box(
                                         modifier = Modifier
                                             .align(androidx.compose.ui.Alignment.TopEnd)

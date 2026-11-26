@@ -33,6 +33,30 @@ class GitHubUpdater @Inject constructor() {
     companion object {
         const val RELEASES_API =
             "https://api.github.com/repos/kuva-project/kuva-vpn/releases/latest"
+        /** Human-facing releases page (browser intent target). */
+        const val RELEASES_PAGE =
+            "https://github.com/kuva-project/kuva-vpn/releases/latest"
+
+        /** Opens this app's Play Store page: market:// first (opens the Play
+         *  app directly), https fallback. Dashboard banner action (patch 283). */
+        fun openPlayStore(ctx: android.content.Context) {
+            val pkg = ctx.packageName
+            val market = android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse("market://details?id=$pkg"),
+            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                ctx.startActivity(market)
+            } catch (t: Throwable) {
+                ctx.startActivity(
+                    android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(
+                            "https://play.google.com/store/apps/details?id=$pkg"),
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+        }
         private const val TAG = "KuvaUpdater"
         private const val CONNECT_TIMEOUT = 10_000
         private const val READ_TIMEOUT = 30_000
